@@ -35,6 +35,7 @@ SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);  // Buat SoftwareSerial d
 
 // BAGIAN GLOBAL GAME
 #define ACTIVE 0     // Status konstanta aktif objek permainan
+#define EXPLODING 1  // Status konstanta meledak objek permainan
 #define DESTROYED 2  // Status konstanta hancur objek permainan
 // Struktur game global, Objek dasar yang akan disertakan oleh sebagian besar objek lain
 struct GameObjectStruct {
@@ -59,8 +60,13 @@ PlayerStruct Player;  // Player global variable
 #define BULLET_WIDTH 8     // Lebar peluru
 #define BULLET_HEIGHT 8    // Panjang peluru
 #define BULLET_SPEED 4     // Kecepatana peluru (semakin besar semakin cepat)
+#define BULLET_GFX_TIME 5  // Durasi berapa lama BULLET_GFX berganti frame
 bool BulletFrame = false;  // false = Diam | true = Jalan
-GameObjectStruct Bullet;   // Objek peluru
+struct BulletStruct {
+  GameObjectStruct Ord;              // Objek peluru
+  unsigned char BulletFrameCounter;  // Variable untuk menentukan berapa lama ganti frame berlangsung
+};
+BulletStruct Bullet;
 
 // BAGIAN INVADER
 #define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
@@ -72,12 +78,14 @@ GameObjectStruct Bullet;   // Objek peluru
 #define X_START_OFFSET 6                 // Offset X lokasi invader
 #define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
 #define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
+#define EXPLOSION_GFX_TIME 7             // Durasi berapa lama EXPLOSION_GFX berada dalam layar
 signed char InvaderXMoveAmount = 2;      // Kecepatan jalan invaders dalam pixel
 signed char InvadersMoveCounter;         // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
 bool InvaderFrame = false;               // false = Diam | true = Jalan
 // Struktur untuk Invader
 struct InvaderStruct {
-  GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
+  GameObjectStruct Ord;               // Inisiasi class GameObjectStruct
+  unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
 };
 InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
 
@@ -198,6 +206,18 @@ static const unsigned char PROGMEM INVADER_3_GFX_02[] = {
   0x99
 };
 
+// Graphics ledakan
+static const unsigned char PROGMEM EXPLOSION_GFX[] = {
+  0x85,
+  0x6a,
+  0x9a,
+  0x7d,
+  0xbe,
+  0x7c,
+  0x52,
+  0x8a
+};
+
 void setup() {
 
   // Inisiasi untuk perangkat keras
@@ -279,14 +299,26 @@ void Draw() {
             }
         }
       }
+      else if (Invader[across][down].Ord.Status == EXPLODING)
+      {
+        Invader[across][down].ExplosionGfxCounter--;
+        if (Invader[across][down].ExplosionGfxCounter > 0)
+        {
+          display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, EXPLOSION_GFX, 8, 8, WHITE);
+        }
+        else
+        {
+          Invader[across][down].Ord.Status = DESTROYED;
+        }
+      }
     }
   }
   display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
-  if (Bullet.Status == ACTIVE) {
+  if (Bullet.Ord.Status == ACTIVE) {
     if (!BulletFrame) {
-      display.drawBitmap(Bullet.X, Bullet.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
+      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
     } else {
-      display.drawBitmap(Bullet.X, Bullet.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
+      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
     }
   }
   display.display();  // Memunculkan semua gambar display
@@ -296,7 +328,7 @@ void Draw() {
 void InitPlayer() {
   Player.Ord.X = PLAYER_X_START;  // Atur lokasi awal X player
   Player.Ord.Y = PLAYER_Y_START;  // Atur lokasi awal Y player
-  Bullet.Status = DESTROYED;
+  Bullet.Ord.Status = DESTROYED;
 }
 
 // Fungsi untuk mengkontrol pemain
@@ -309,22 +341,22 @@ void PlayerControl() {
   {
     Player.Ord.X -= PLAYER_X_MOVE_AMOUNT;  // Majukan pemain ke kiri
   }
-  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
+  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Ord.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
   {
-    Bullet.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
-    Bullet.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
-    Bullet.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
+    Bullet.Ord.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
+    Bullet.Ord.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
+    Bullet.Ord.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
   }
 }
 
 // Fungsi untuk mengatur peluru
 void BulletControl() {
-  if (Bullet.Status == ACTIVE)  // Jika status peluru aktif
+  if (Bullet.Ord.Status == ACTIVE)  // Jika status peluru aktif
   {
-    Bullet.Y -= BULLET_SPEED;          // Jalankan peluru keatas
-    if (Bullet.Y + BULLET_HEIGHT < 0)  // Jika peluru melewati layar atas
+    Bullet.Ord.Y -= BULLET_SPEED;          // Jalankan peluru keatas
+    if (Bullet.Ord.Y + BULLET_HEIGHT < 0)  // Jika peluru melewati layar atas
     {
-      Bullet.Status = DESTROYED;  // Ubah status peluru menjadi "DESTROYED" (hancur)
+      Bullet.Ord.Status = DESTROYED;  // Ubah status peluru menjadi "DESTROYED" (hancur)
     }
     BulletFrame = !BulletFrame;  // Ubah frame
   }
@@ -346,6 +378,8 @@ void InitInvaders(int YSTART) {
       // Melakukan kalkulasi letak koordinat masing-masing Invader (masing-masing beda) mulai dari X lanjut ke Y;
       Invader[across][down].Ord.X = X_START_OFFSET + (across * (INVADER_WIDTH + SPACE_BETWEEN_INVADER_COLUMNS)) - down;
       Invader[across][down].Ord.Y = YSTART + (down * SPACE_BETWEEN_INVADER_ROWS);
+      Invader[across][down].Ord.Status = ACTIVE;
+      Invader[across][down].ExplosionGfxCounter = EXPLOSION_GFX_TIME;
     }
   }
 }
@@ -394,12 +428,12 @@ void BulletAndInvaderCollisions() {
     {
       if (Invader[across][down].Ord.Status == ACTIVE)  // Jika status Invader "ACTIVE"
       {
-        if (Bullet.Status == ACTIVE)  // Jika status "Bullet" "ACTIVE"
+        if (Bullet.Ord.Status == ACTIVE)  // Jika status "Bullet" "ACTIVE"
         {
-          if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Cek jika funsi Collision() memberikan statement true
+          if (Collision(Bullet.Ord, BULLET_WIDTH, BULLET_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Cek jika funsi Collision() memberikan statement true
           {
-            Invader[across][down].Ord.Status = DESTROYED;  // Ubah status Invader menjadi "DESTROYED"
-            Bullet.Status = DESTROYED;                     // Ubah status peluru menjadi "DESTROYED"
+            Invader[across][down].Ord.Status = EXPLODING;  // Ubah status Invader menjadi "EXPLODING"
+            Bullet.Ord.Status = DESTROYED;                 // Ubah status peluru menjadi "DESTROYED"
           }
         }
       }
