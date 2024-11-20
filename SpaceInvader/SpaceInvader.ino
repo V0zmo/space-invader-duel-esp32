@@ -18,21 +18,13 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #include <Adafruit_SSD1306.h>
 #include <Preferences.h>
 
+// KONSTANT VARIABLE
+
 // BAGIAN DISPLAY
-#define OLED_RESET -1                                                      // Setel ulang pin # (atau -1 jika berbagi pin setel ulang Arduino)
-#define OLED_ADDRESS 0x3C                                                  // Alamat OLED
-#define SCREEN_WIDTH 128                                                   // Lebar tampilan OLED, dalam piksel
-#define SCREEN_HEIGHT 64                                                   // Tinggi tampilan OLED, dalam piksel
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);  // Deklarasi untuk layar SSD1306 yang tersambung ke I2C (SDA, pin SCL)
-
-// BAGIAN AUDIO
-static const uint8_t PIN_MP3_TX = 26;                   // Menghubungkan ke RX modul
-static const uint8_t PIN_MP3_RX = 27;                   // Menghubungkan ke TX modul
-DFRobotDFPlayerMini mpPlayer;                           // Membuat MP Player
-SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);  // Buat SoftwareSerial dengan pin TX/RX
-
-// BAGIAN PENYIMPANAN
-Preferences preferences;  // Inisiasi class preferences dari library <Preferences.h>
+#define OLED_RESET -1      // Setel ulang pin # (atau -1 jika berbagi pin setel ulang Arduino)
+#define OLED_ADDRESS 0x3C  // Alamat OLED
+#define SCREEN_WIDTH 128   // Lebar tampilan OLED, dalam piksel
+#define SCREEN_HEIGHT 64   // Tinggi tampilan OLED, dalam piksel
 
 // BAGIAN TOMBOL
 #define SHOOT_BUTTON 12  // Pin tombol 1
@@ -44,13 +36,6 @@ Preferences preferences;  // Inisiasi class preferences dari library <Preference
 #define EXPLODING 1           // Status konstanta meledak objek permainan
 #define DESTROYED 2           // Status konstanta hancur objek permainan
 #define EXPLOSION_GFX_TIME 7  // Durasi berapa lama EXPLOSION_GFX berada dalam layar
-unsigned int HighScore;       // Skor tertinggi dalam game secara global
-// Struktur game global, Objek dasar yang akan disertakan oleh sebagian besar objek lain
-struct GameObjectStruct {
-  signed int X;          // Lokasi X
-  signed int Y;          // Lokasi Y
-  unsigned char Status;  // 0 Active | 1 Exploding | 2 Destroyed
-};
 
 // BAGIAN PLAYER
 #define PLAYER_WIDTH 8          // Lebar player
@@ -58,45 +43,9 @@ struct GameObjectStruct {
 #define PLAYER_X_MOVE_AMOUNT 2  // Kecepatan jalan player dalam pixel
 #define PLAYER_X_START 0        // Lokasi mulai player dalam koordinat X
 #define PLAYER_Y_START 56       // Lokasi mulai player dalam koordinat Y
-// Struktur untuk Player
-struct PlayerStruct {
-  GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
-  unsigned int Score;    // Skor untuk masing-masing player (Saat Multiplayer)
-  unsigned int Lives;    // Nyawa player
-};
-PlayerStruct Player;  // Player global variable
-
-// BAGIAN MISIL / PELURU
-#define BULLET_WIDTH 8       // Lebar peluru
-#define BULLET_HEIGHT 8      // Panjang peluru
-#define BULLET_SPEED 4       // Kecepatana peluru (semakin besar semakin cepat)
-#define BULLET_FRAME_TIME 5  // Durasi berapa lama BULLET_GFX berganti frame
-bool BulletFrame = false;    // false = Diam | true = Jalan
-struct BulletStruct {
-  GameObjectStruct Ord;              // Objek peluru
-  unsigned char BulletFrameCounter;  // Variable untuk menentukan berapa lama ganti frame berlangsung
-};
-BulletStruct Bullet;  // Inisiasi class Bullet
-
-// BAGIAN INVADER
-#define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
-#define NUM_INVADER_ROWS 3               // Jumlah invader lurus ke bawah
-#define SPACE_BETWEEN_INVADER_COLUMNS 5  // Jarak antara invader dari kanan
-#define SPACE_BETWEEN_INVADER_ROWS 16    // Jarak antara invader dari bawah
-#define INVADER_WIDTH 8                  // Ukuran lebar terbesar invader
-#define INVADER_HEIGHT 8                 // Ukuran lebar terbesar invader
-#define X_START_OFFSET 6                 // Offset X lokasi invader
-#define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
-#define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
-signed char InvaderXMoveAmount = 2;      // Kecepatan jalan invaders dalam pixel
-signed char InvadersMoveCounter;         // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
-bool InvaderFrame = false;               // false = Diam | true = Jalan
-// Struktur untuk Invader
-struct InvaderStruct {
-  GameObjectStruct Ord;               // Inisiasi class GameObjectStruct
-  unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
-};
-InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
+#define BULLET_WIDTH 2          // Lebar peluru
+#define BULLET_HEIGHT 7         // Panjang peluru
+#define BULLET_SPEED 4          // Kecepatana peluru (semakin besar semakin cepat)
 
 // BAGIAN MOTHERSHIP
 #define MOTHERSHIP_WIDTH 8                // Panjang Mothership
@@ -104,19 +53,80 @@ InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader d
 #define MOTHERSHIP_SPEED 2                // Kecepatan Mothership dalam pixel
 #define MOTHERSHIP_SPAWN_CHANCE 250       // Nilai lebih tinggi, kemungkinan muncul lebih kecil
 #define DISPLAY_MOTHERSHIP_BONUS_TIME 25  // Berapa lama bonus tetap berada di layar untuk menampilkan Mothership
-signed char MothershipSpeed;              // Kecepatan Mothership dalam pixel yang dapat diubah
-unsigned int MothershipBonus;             // Bonus pada Mothership
-signed int MothershipBonusXPos;           // Lokasi koordinat X pada Mothership bonus
-unsigned char MothershipBonusCounter;     // Berapa banyak ketemu Mothership bonus
-InvaderStruct Mothership;                 // Buat Mothership
 
-/*
-Dikarenakan graphics musuh untuk ukuran 16x16 px terlalu besar jadi kita bakalan perkecil
-jadi 8x8 px untuk mendapatkan suasanya 8bit game serta untuk menghemat tempat ruang dibagian
-display dan juga bagian processor di ESP32. Untuk penulisan data diusahakan menggunakan
-hexadecimal, untuk permudah bacaan dan ringkas kode. Apabila kesulitan bisa menggunakan
-angka biner.
-*/
+// BAGIAN INVADER
+#define NUM_INVADER_COLUMNS 7                  // Jumlah invader lurus ke kanan
+#define NUM_INVADER_ROWS 3                     // Jumlah invader lurus ke bawah
+#define SPACE_BETWEEN_INVADER_COLUMNS 5        // Jarak antara invader dari kanan
+#define SPACE_BETWEEN_INVADER_ROWS 16          // Jarak antara invader dari bawah
+#define INVADER_WIDTH 8                        // Ukuran lebar terbesar invader
+#define INVADER_HEIGHT 8                       // Ukuran lebar terbesar invader
+#define X_START_OFFSET 6                       // Offset X lokasi invader
+#define INVADER_Y_START MOTHERSHIP_HEIGHT - 1  // Atur awal mula Invader muncul
+#define AMOUNT_TO_DROP_PER_LEVEL 4             // Seberapa jauh Invader turun tiap level baru
+#define INVADERS_DROP 4                        // Seberapa jauh invader jatuh dalam pixel
+#define INVADERS_SPEED 12                      // Kecepatan invader (semakin rendah semakin cepat)
+#define LEVEL_RESET_TO_START_HEIGHT 4          // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
+#define ALIEN_X_MOVE_AMOUNT 1                  // Jumlah pixel tiap mulai ronde baru
+#define CHANCE_ATTACK 20                       // Semakin besar semakin kecil persentase Invader menyerang pemain
+#define ATTACK_WIDTH 4                         // Lebar serangan Invader
+#define ATTACK_HEIGHT 8                        // Tinggi serangan Invader
+#define MAX_ATTACK 3                           // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
+
+// < TERAKHIR DIUBAH > 
+
+// STRUKTUR GAME
+
+// Struktur game global, Objek dasar yang akan disertakan oleh sebagian besar objek lain
+struct GameObjectStruct {
+  signed int X;          // Lokasi X
+  signed int Y;          // Lokasi Y
+  unsigned char Status;  // 0 Active | 1 Exploding | 2 Destroyed
+};
+
+// Struktur untuk Player
+struct PlayerStruct {
+  GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
+  unsigned int Score;    // Skor untuk masing-masing player (Saat Multiplayer)
+  unsigned int Lives;    // Nyawa player
+};
+
+// Struktur untuk Invader
+struct InvaderStruct {
+  GameObjectStruct Ord;               // Inisiasi class GameObjectStruct
+  unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
+};
+
+// GLOBAL VARIABLE
+
+// Global audio
+static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
+static const uint8_t PIN_MP3_RX = 27;  // Menghubungkan ke TX modul
+
+// Global game
+unsigned int HighScore;  // Skor tertinggi dalam game secara global
+
+// Global Mothership
+signed char MothershipSpeed;           // Kecepatan Mothership dalam pixel yang dapat diubah
+unsigned int MothershipBonus;          // Bonus pada Mothership
+signed int MothershipBonusXPos;        // Lokasi koordinat X pada Mothership bonus
+unsigned char MothershipBonusCounter;  // Berapa banyak ketemu Mothership bonus
+
+// Global Invader
+signed char InvaderXMoveAmount = 2;  // Kecepatan jalan invaders dalam pixel
+signed char InvadersMoveCounter;     // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
+bool InvaderFrame = false;           // false = Diam | true = Jalan
+
+// Inisiasi Library dan Struktur Game
+
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);  // Deklarasi untuk layar SSD1306 yang tersambung ke I2C (SDA, pin SCL)
+DFRobotDFPlayerMini mpPlayer;                                              // Membuat MP Player
+SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);                     // Buat SoftwareSerial dengan pin TX/RX
+Preferences preferences;                                                   // Inisiasi class preferences dari library <Preferences.h>
+GameObjectStruct Bullet;                                                   // Inisiasi class Bullet
+PlayerStruct Player;                                                       // Player global variable
+InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];              // Buat Invader dengan multidimension array (seperti tabel)
+InvaderStruct Mothership;                                                  // Buat Mothership
 
 // Graphics Player
 static const unsigned char PROGMEM PLAYER_GFX[] = {
@@ -131,27 +141,26 @@ static const unsigned char PROGMEM PLAYER_GFX[] = {
 };
 
 // Graphics Bullet 1
-static const unsigned char PROGMEM BULLET1_GFX[] = {
-  0x18,
-  0x18,
-  0x18,
+static const unsigned char PROGMEM PLAYER_BULLET[] = {
+  0xc0,
+  0xc0,
+  0xc0,
   0x00,
-  0x18,
-  0x18,
-  0x18,
-  0x00
+  0xc0,
+  0xc0,
+  0xc0
 };
 
 // Graphics Bullet 2
-static const unsigned char PROGMEM BULLET2_GFX[] = {
-  0x18,
-  0x24,
+static const unsigned char PROGMEM INVADER_BULLET[] = {
+  0x60,
+  0x90,
   0x00,
-  0x18,
-  0x24,
+  0x60,
+  0x90,
   0x00,
-  0x18,
-  0x24
+  0x60,
+  0x90
 };
 
 // Graphics Musuh 1 (Diam)
@@ -282,7 +291,7 @@ void setup() {
   display.setTextSize(1);
   display.setTextColor(WHITE);
 
-  InitInvaders(0);
+  InitInvaders(INVADER_Y_START);
   InitPlayer();
 }
 
@@ -360,22 +369,9 @@ void Draw() {
   }
 
   // GAMBAR PELURU
-  if (Bullet.Ord.Status == ACTIVE)  // Jika status "Bullet" aktif
+  if (Bullet.Status == ACTIVE)  // Jika status "Bullet" aktif
   {
-    Bullet.BulletFrameCounter--;         // Kurangi waktu untuk lanjut ke frame selanjutnya
-    if (Bullet.BulletFrameCounter <= 0)  // Jika waktu frame habis
-    {
-      BulletFrame = !BulletFrame;                     // Toggle (ubah) BulletFrame antara true dan false
-      Bullet.BulletFrameCounter = BULLET_FRAME_TIME;  // Reset frame counter ke interval yang diinginkan
-    }
-
-    if (!BulletFrame)  // Jika variable "BulletFrame" bernilai "false"
-    {
-      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar BULLET1_GFX ke display
-    } else                                                                                              // Jika variable "BulletFrame" bernilai "true"
-    {
-      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar BULLET2_GFX ke display
-    }
+    display.drawBitmap(Bullet.X, Bullet.Y, PLAYER_BULLET, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar PLAYER_BULLET ke display
   }
 
   // GAMBAR MOTHERSHIP
@@ -401,9 +397,7 @@ void Draw() {
     display.setCursor(MothershipBonusXPos, 0);  // Atur lokasi tulis teks pada lokasi X "MothershipBonusXPos"
     display.print(MothershipBonus);             // Tampilkan jumlah bonus point yang didapatkan
     MothershipBonusCounter--;                   // Hitung mundur nilai agar tidak permanen di layar
-  }
-  else
-  {
+  } else {
     display.setCursor(0, 0);
     display.print(Player.Score);
     display.setCursor(SCREEN_WIDTH - 7, 0);
@@ -417,7 +411,7 @@ void Draw() {
 void InitPlayer() {
   Player.Ord.X = PLAYER_X_START;  // Atur lokasi awal X player
   Player.Ord.Y = PLAYER_Y_START;  // Atur lokasi awal Y player
-  Bullet.Ord.Status = DESTROYED;  // Atur agar status "Bullet" menjadi "DESTROYED"
+  Bullet.Status = DESTROYED;      // Atur agar status "Bullet" menjadi "DESTROYED"
   Player.Score = 0;               // Atur skor pemain menjadi 0
 }
 
@@ -431,23 +425,22 @@ void PlayerControlUpdate() {
   {
     Player.Ord.X -= PLAYER_X_MOVE_AMOUNT;  // Majukan pemain ke kiri
   }
-  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Ord.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
+  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
   {
-    Bullet.Ord.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
-    Bullet.Ord.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
-    Bullet.Ord.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
-    Bullet.BulletFrameCounter = BULLET_FRAME_TIME;         // Atur waktu frame bullet
+    Bullet.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
+    Bullet.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
+    Bullet.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
   }
 }
 
 // Fungsi untuk mengatur peluru
 void BulletControlUpdate() {
-  if (Bullet.Ord.Status == ACTIVE)  // Jika status peluru aktif
+  if (Bullet.Status == ACTIVE)  // Jika status peluru aktif
   {
-    Bullet.Ord.Y -= BULLET_SPEED;          // Jalankan peluru keatas
-    if (Bullet.Ord.Y + BULLET_HEIGHT < 0)  // Jika peluru melewati layar atas
+    Bullet.Y -= BULLET_SPEED;          // Jalankan peluru keatas
+    if (Bullet.Y + BULLET_HEIGHT < 0)  // Jika peluru melewati layar atas
     {
-      Bullet.Ord.Status = DESTROYED;  // Ubah status peluru menjadi "DESTROYED" (hancur)
+      Bullet.Status = DESTROYED;  // Ubah status peluru menjadi "DESTROYED" (hancur)
     }
   }
 }
@@ -560,15 +553,13 @@ void BulletAndInvaderCollisions() {
     {
       if (Invader[across][down].Ord.Status == ACTIVE)  // Jika status Invader "ACTIVE"
       {
-        if (Bullet.Ord.Status == ACTIVE)  // Jika status "Bullet" "ACTIVE"
+        if (Bullet.Status == ACTIVE)  // Jika status "Bullet" "ACTIVE"
         {
-          if (Collision(Bullet.Ord, BULLET_WIDTH, BULLET_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Cek jika funsi Collision() memberikan statement true
+          if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Cek jika funsi Collision() memberikan statement true
           {
             Invader[across][down].Ord.Status = EXPLODING;  // Ubah status Invader menjadi "EXPLODING"
-            Bullet.Ord.Status = DESTROYED;                 // Ubah status peluru menjadi "DESTROYED"
+            Bullet.Status = DESTROYED;                     // Ubah status peluru menjadi "DESTROYED"
             Player.Score += InvaderScore(down);            // Menambah nilai skor pemain berdasarkan baris bawah mana yang ditembak
-
-            
           }
         }
       }
@@ -578,13 +569,13 @@ void BulletAndInvaderCollisions() {
 
 // // Fungsi untuk mengecek tabarakan antara Bullet dan Mothership
 void MothershipCollision() {
-  if ((Bullet.Ord.Status == ACTIVE) && (Mothership.Ord.Status == ACTIVE))  // Jika status Bullet dan Mothership "ACTIVE"
+  if ((Bullet.Status == ACTIVE) && (Mothership.Ord.Status == ACTIVE))  // Jika status Bullet dan Mothership "ACTIVE"
   {
-    if (Collision(Bullet.Ord, BULLET_WIDTH, BULLET_HEIGHT, Mothership.Ord, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT))  // Jika tabrakan terjadi
+    if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Mothership.Ord, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT))  // Jika tabrakan terjadi
     {
       Mothership.Ord.Status = EXPLODING;                    // Atur status Mothership menjadi "EXPLODING"
       Mothership.ExplosionGfxCounter = EXPLOSION_GFX_TIME;  // Mengatur waktu Invader apabila ditembak
-      Bullet.Ord.Status = DESTROYED;                        // Mengubah status peluru menjadi "DESTROYED"
+      Bullet.Status = DESTROYED;                            // Mengubah status peluru menjadi "DESTROYED"
       MothershipBonus = random(4);                          // GACHA! (Pilih angka random dari (0-3))
       switch (MothershipBonus)                              // Cek kondisi dari gacha (angka random) "MothershipBonus"
       {
