@@ -6,14 +6,17 @@ EspSoftwareSerial (Dirk Kaar, Peter Lerup) untuk SoftwareSerial.h
 DFRobotDFPlayerMini (DFRobot) untuk DFRobotDFPlayerMini.h
 Adafruit SSD1306 (Adafruit) untuk Adafruit_SSD1306.h
 Adafruit GFX Library (Adafruit) untuk Adafruit_GFX.h
+
+Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 */
 
 // LIBRARY
-#include "SoftwareSerial.h"
-#include "DFRobotDFPlayerMini.h"
+#include <SoftwareSerial.h>
+#include <DFRobotDFPlayerMini.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Preferences.h>
 
 // BAGIAN DISPLAY
 #define OLED_RESET -1                                                      // Setel ulang pin # (atau -1 jika berbagi pin setel ulang Arduino)
@@ -28,6 +31,9 @@ static const uint8_t PIN_MP3_RX = 27;                   // Menghubungkan ke TX m
 DFRobotDFPlayerMini mpPlayer;                           // Membuat MP Player
 SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);  // Buat SoftwareSerial dengan pin TX/RX
 
+// BAGIAN PENYIMPANAN
+Preferences preferences;  // Inisiasi class preferences dari library <Preferences.h>
+
 // BAGIAN TOMBOL
 #define SHOOT_BUTTON 12  // Pin tombol 1
 #define LEFT_BUTTON 13   // Pin tombol 2
@@ -38,6 +44,7 @@ SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);  // Buat SoftwareSerial d
 #define EXPLODING 1           // Status konstanta meledak objek permainan
 #define DESTROYED 2           // Status konstanta hancur objek permainan
 #define EXPLOSION_GFX_TIME 7  // Durasi berapa lama EXPLOSION_GFX berada dalam layar
+unsigned int HighScore;       // Skor tertinggi dalam game secara global
 // Struktur game global, Objek dasar yang akan disertakan oleh sebagian besar objek lain
 struct GameObjectStruct {
   signed int X;          // Lokasi X
@@ -54,6 +61,8 @@ struct GameObjectStruct {
 // Struktur untuk Player
 struct PlayerStruct {
   GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
+  unsigned int Score;    // Skor untuk masing-masing player (Saat Multiplayer)
+  unsigned int Lives;    // Nyawa player
 };
 PlayerStruct Player;  // Player global variable
 
@@ -67,7 +76,7 @@ struct BulletStruct {
   GameObjectStruct Ord;              // Objek peluru
   unsigned char BulletFrameCounter;  // Variable untuk menentukan berapa lama ganti frame berlangsung
 };
-BulletStruct Bullet;
+BulletStruct Bullet;  // Inisiasi class Bullet
 
 // BAGIAN INVADER
 #define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
@@ -259,10 +268,14 @@ void setup() {
     for (;;)
       ;
   }
+
   // Cek jika MP Player tidak dapat tersambung
   if (!mpPlayer.begin(softwareSerial)) {
     Serial.println("Connecting to DFPlayer Mini failed!");
   }
+
+  preferences.begin("storage", false);
+  preferences.getInt("HighScore", 0);
 
   // Inisiasi untuk permainan
 
@@ -369,7 +382,7 @@ void Draw() {
   if (Mothership.Ord.Status == ACTIVE)  // Jika Mothership statusnya "ACTIVE"
   {
     display.drawBitmap(Mothership.Ord.X, Mothership.Ord.Y, MOTHERSHIP_GFX, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT, WHITE);  // Gambar MOTHERSHIP_GFX ke display
-  } else if (Mothership.Ord.Status == EXPLODING)                                                                          // Jika Mothership statusnya "EXPLODING"
+  } else if (Mothership.Ord.Status == EXPLODING)                                                                         // Jika Mothership statusnya "EXPLODING"
   {
     for (i = 0; i < MOTHERSHIP_WIDTH; i += 2)  // Randomisasi ledakan untuk MOTHERSHIP
     {
@@ -389,6 +402,13 @@ void Draw() {
     display.print(MothershipBonus);             // Tampilkan jumlah bonus point yang didapatkan
     MothershipBonusCounter--;                   // Hitung mundur nilai agar tidak permanen di layar
   }
+  else
+  {
+    display.setCursor(0, 0);
+    display.print(Player.Score);
+    display.setCursor(SCREEN_WIDTH - 7, 0);
+    display.print(Player.Lives);
+  }
 
   display.display();  // Memunculkan semua gambar display
 }
@@ -398,6 +418,7 @@ void InitPlayer() {
   Player.Ord.X = PLAYER_X_START;  // Atur lokasi awal X player
   Player.Ord.Y = PLAYER_Y_START;  // Atur lokasi awal Y player
   Bullet.Ord.Status = DESTROYED;  // Atur agar status "Bullet" menjadi "DESTROYED"
+  Player.Score = 0;               // Atur skor pemain menjadi 0
 }
 
 // Fungsi untuk mengkontrol pemain
@@ -454,8 +475,8 @@ void InitInvaders(int YSTART) {
 
   // BAGIAN MOTHERSHIP
   Mothership.Ord.X = -MOTHERSHIP_WIDTH;  // Atur lokasi X Mothership sesuai dengan nilai negatif lebar gambar
-  Mothership.Ord.Y = 0;                 // Atur lokasi Y Mothership diatas layar
-  Mothership.Ord.Status = DESTROYED;    // Atur status menjadi "DESTROYED"
+  Mothership.Ord.Y = 0;                  // Atur lokasi Y Mothership diatas layar
+  Mothership.Ord.Status = DESTROYED;     // Atur status menjadi "DESTROYED"
 }
 
 // Buat mengontrol jalan invaders
@@ -545,6 +566,9 @@ void BulletAndInvaderCollisions() {
           {
             Invader[across][down].Ord.Status = EXPLODING;  // Ubah status Invader menjadi "EXPLODING"
             Bullet.Ord.Status = DESTROYED;                 // Ubah status peluru menjadi "DESTROYED"
+            Player.Score += InvaderScore(down);            // Menambah nilai skor pemain berdasarkan baris bawah mana yang ditembak
+
+            
           }
         }
       }
@@ -577,6 +601,7 @@ void MothershipCollision() {
           MothershipBonus = 200;  // Atur "MothershipBonus" mendapatkan nilai bonus 200
           break;                  // Keluar dari switch statement
       }
+      Player.Score += MothershipBonus;
       MothershipBonusXPos = Mothership.Ord.X;  // Atur posisi Mothership bonus koordinat X dengan lokasi Mothership koordinat X
       if (MothershipBonusXPos > 100)           // Jika lokasi Mothership bonus melebihi nilai 100 (melewati layar kanan)
       {
@@ -594,6 +619,16 @@ void MothershipCollision() {
 bool Collision(GameObjectStruct OBJECT1, unsigned char WIDTH1, unsigned char HEIGHT1, GameObjectStruct OBJECT2, unsigned char WIDTH2, unsigned char HEIGHT2) {
   // Mengembalikan nilai "true" jika 2 obek ter-tabarakan
   return ((OBJECT1.X + WIDTH1 > OBJECT2.X) && (OBJECT1.X < OBJECT2.X + WIDTH2) && (OBJECT1.Y + HEIGHT1 > OBJECT2.Y) && (OBJECT1.Y < OBJECT2.Y + WIDTH2));
+}
+
+// Fungsi untuk skor ketika menembak Invader
+unsigned char InvaderScore(int ROW_NUMBER) {
+  switch (ROW_NUMBER)  // Cek Invader baris bawah mana yang ditembak
+  {
+    case 0: return 30;  // Jika di atas dapat skor 30
+    case 1: return 20;  // Jika di tengah dapat skor 20
+    case 2: return 10;  // Jika di bawah dapat skor 10
+  }
 }
 
 // Cek invader mana yang paling kanan
