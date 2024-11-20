@@ -57,11 +57,11 @@ struct PlayerStruct {
 PlayerStruct Player;  // Player global variable
 
 // BAGIAN MISIL / PELURU
-#define BULLET_WIDTH 8     // Lebar peluru
-#define BULLET_HEIGHT 8    // Panjang peluru
-#define BULLET_SPEED 4     // Kecepatana peluru (semakin besar semakin cepat)
-#define BULLET_GFX_TIME 5  // Durasi berapa lama BULLET_GFX berganti frame
-bool BulletFrame = false;  // false = Diam | true = Jalan
+#define BULLET_WIDTH 8       // Lebar peluru
+#define BULLET_HEIGHT 8      // Panjang peluru
+#define BULLET_SPEED 4       // Kecepatana peluru (semakin besar semakin cepat)
+#define BULLET_FRAME_TIME 5  // Durasi berapa lama BULLET_GFX berganti frame
+bool BulletFrame = false;    // false = Diam | true = Jalan
 struct BulletStruct {
   GameObjectStruct Ord;              // Objek peluru
   unsigned char BulletFrameCounter;  // Variable untuk menentukan berapa lama ganti frame berlangsung
@@ -298,27 +298,35 @@ void Draw() {
               display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_3_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 3 (Jalan)
             }
         }
-      }
-      else if (Invader[across][down].Ord.Status == EXPLODING)
+      } else if (Invader[across][down].Ord.Status == EXPLODING)  // Jika status "Invader" adalah "EXPLODING"
       {
-        Invader[across][down].ExplosionGfxCounter--;
-        if (Invader[across][down].ExplosionGfxCounter > 0)
+        Invader[across][down].ExplosionGfxCounter--;        // Kurangi timer "ExplosionGfxCounter"
+        if (Invader[across][down].ExplosionGfxCounter > 0)  // Jika waktu timer belum habis
         {
-          display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, EXPLOSION_GFX, 8, 8, WHITE);
-        }
-        else
+          display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, EXPLOSION_GFX, 8, 8, WHITE);  // Gambar EXPLOSION_GFX
+        } else                                                                                                       // Jika waktu habis
         {
-          Invader[across][down].Ord.Status = DESTROYED;
+          Invader[across][down].Ord.Status = DESTROYED;  // Ubah status menjadi "DESTROYED"
         }
       }
     }
   }
   display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
-  if (Bullet.Ord.Status == ACTIVE) {
-    if (!BulletFrame) {
-      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
-    } else {
-      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
+  if (Bullet.Ord.Status == ACTIVE)                                                                 // Jika status "Bullet" aktif
+  {
+    Bullet.BulletFrameCounter--;         // Kurangi waktu untuk lanjut ke frame selanjutnya
+    if (Bullet.BulletFrameCounter <= 0)  // Jika waktu frame habis
+    {
+      BulletFrame = !BulletFrame;                     // Toggle (ubah) BulletFrame antara true dan false
+      Bullet.BulletFrameCounter = BULLET_FRAME_TIME;  // Reset frame counter ke interval yang diinginkan
+    }
+
+    if (!BulletFrame)  // Jika variable "BulletFrame" bernilai "false"
+    {
+      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar BULLET1_GFX ke display
+    } else  // Jika variable "BulletFrame" bernilai "true"
+    {
+      display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar BULLET2_GFX ke display
     }
   }
   display.display();  // Memunculkan semua gambar display
@@ -328,7 +336,7 @@ void Draw() {
 void InitPlayer() {
   Player.Ord.X = PLAYER_X_START;  // Atur lokasi awal X player
   Player.Ord.Y = PLAYER_Y_START;  // Atur lokasi awal Y player
-  Bullet.Ord.Status = DESTROYED;
+  Bullet.Ord.Status = DESTROYED;  // Atur agar status "Bullet" menjadi "DESTROYED"
 }
 
 // Fungsi untuk mengkontrol pemain
@@ -346,6 +354,7 @@ void PlayerControl() {
     Bullet.Ord.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
     Bullet.Ord.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
     Bullet.Ord.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
+    Bullet.BulletFrameCounter = BULLET_FRAME_TIME;         // Atur waktu frame bullet
   }
 }
 
@@ -358,7 +367,6 @@ void BulletControl() {
     {
       Bullet.Ord.Status = DESTROYED;  // Ubah status peluru menjadi "DESTROYED" (hancur)
     }
-    BulletFrame = !BulletFrame;  // Ubah frame
   }
 }
 
