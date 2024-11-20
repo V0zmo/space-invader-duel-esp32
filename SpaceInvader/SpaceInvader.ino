@@ -34,9 +34,10 @@ SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);  // Buat SoftwareSerial d
 #define RIGHT_BUTTON 14  // Pin tombol 3
 
 // BAGIAN GLOBAL GAME
-#define ACTIVE 0     // Status konstanta aktif objek permainan
-#define EXPLODING 1  // Status konstanta meledak objek permainan
-#define DESTROYED 2  // Status konstanta hancur objek permainan
+#define ACTIVE 0              // Status konstanta aktif objek permainan
+#define EXPLODING 1           // Status konstanta meledak objek permainan
+#define DESTROYED 2           // Status konstanta hancur objek permainan
+#define EXPLOSION_GFX_TIME 7  // Durasi berapa lama EXPLOSION_GFX berada dalam layar
 // Struktur game global, Objek dasar yang akan disertakan oleh sebagian besar objek lain
 struct GameObjectStruct {
   signed int X;          // Lokasi X
@@ -78,7 +79,6 @@ BulletStruct Bullet;
 #define X_START_OFFSET 6                 // Offset X lokasi invader
 #define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
 #define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
-#define EXPLOSION_GFX_TIME 7             // Durasi berapa lama EXPLOSION_GFX berada dalam layar
 signed char InvaderXMoveAmount = 2;      // Kecepatan jalan invaders dalam pixel
 signed char InvadersMoveCounter;         // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
 bool InvaderFrame = false;               // false = Diam | true = Jalan
@@ -89,6 +89,17 @@ struct InvaderStruct {
 };
 InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
 
+// BAGIAN MOTHERSHIP
+#define MOTHERSHIP_WIDTH 8                // Panjang Mothership
+#define MOTHERSHIP_HEIGHT 8               // Tinggi Mothership
+#define MOTHERSHIP_SPEED 2                // Kecepatan Mothership dalam pixel
+#define MOTHERSHIP_SPAWN_CHANCE 250       // Nilai lebih tinggi, kemungkinan muncul lebih kecil
+#define DISPLAY_MOTHERSHIP_BONUS_TIME 25  // Berapa lama bonus tetap berada di layar untuk menampilkan Mothership
+signed char MothershipSpeed;              // Kecepatan Mothership dalam pixel yang dapat diubah
+unsigned int MothershipBonus;             // Bonus pada Mothership
+signed int MothershipBonusXPos;           // Lokasi koordinat X pada Mothership bonus
+unsigned char MothershipBonusCounter;     // Berapa banyak ketemu Mothership bonus
+InvaderStruct Mothership;                 // Buat Mothership
 
 /*
 Dikarenakan graphics musuh untuk ukuran 16x16 px terlalu besar jadi kita bakalan perkecil
@@ -206,6 +217,18 @@ static const unsigned char PROGMEM INVADER_3_GFX_02[] = {
   0x99
 };
 
+// Graphics Mothership
+static const unsigned char PROGMEM MOTHERSHIP_GFX[] = {
+  0x18,
+  0x3c,
+  0x3c,
+  0xff,
+  0xff,
+  0xff,
+  0x7e,
+  0x3c
+};
+
 // Graphics ledakan
 static const unsigned char PROGMEM EXPLOSION_GFX[] = {
   0x85,
@@ -243,6 +266,9 @@ void setup() {
 
   // Inisiasi untuk permainan
 
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
   InitInvaders(0);
   InitPlayer();
 }
@@ -254,15 +280,23 @@ void loop() {
 
 // Fungsi Update untuk semua yang berhubungan dengan logika atau perhitungan dalam kodingan
 void Update() {
-  InvaderControl();   // Fungsi logika Invader
-  PlayerControl();    // Fungsi logika Player
-  BulletControl();    // Fungsi logika Bullet
-  CheckCollisions();  // Fungsi logika pengecekan kolisi
+  InvaderControlUpdate();     // Fungsi logika Invader
+  MothershipControlUpdate();  //Fungsi logika Mothership
+  PlayerControlUpdate();      // Fungsi logika Player
+  BulletControlUpdate();      // Fungsi logika Bullet
+  CheckCollisionsUpdate();    // Fungsi logika pengecekan kolisi
 }
 
 // Fungsi Draw untuk semua urusan yang berhubungan gambar
 void Draw() {
-  display.clearDisplay();                                       // Menghilangkan semua gambar display (Prosesor lambat jangan dicoba! ( •̀ ω •́ )✧)
+  int i;
+
+  display.clearDisplay();  // Menghilangkan semua gambar display (Prosesor lambat jangan dicoba! ( •̀ ω •́ )✧)
+
+  // GAMBAR PLAYER
+  display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
+
+  // GAMBAR INVADER
   for (int across = 0; across < NUM_INVADER_COLUMNS; across++)  // Looping dan cek untuk baris ke kanan
   {
     for (int down = 0; down < NUM_INVADER_ROWS; down++)  // Looping dan cek untuk baris ke bawah
@@ -311,8 +345,9 @@ void Draw() {
       }
     }
   }
-  display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
-  if (Bullet.Ord.Status == ACTIVE)                                                                 // Jika status "Bullet" aktif
+
+  // GAMBAR PELURU
+  if (Bullet.Ord.Status == ACTIVE)  // Jika status "Bullet" aktif
   {
     Bullet.BulletFrameCounter--;         // Kurangi waktu untuk lanjut ke frame selanjutnya
     if (Bullet.BulletFrameCounter <= 0)  // Jika waktu frame habis
@@ -324,11 +359,37 @@ void Draw() {
     if (!BulletFrame)  // Jika variable "BulletFrame" bernilai "false"
     {
       display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar BULLET1_GFX ke display
-    } else  // Jika variable "BulletFrame" bernilai "true"
+    } else                                                                                              // Jika variable "BulletFrame" bernilai "true"
     {
       display.drawBitmap(Bullet.Ord.X, Bullet.Ord.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar BULLET2_GFX ke display
     }
   }
+
+  // GAMBAR MOTHERSHIP
+  if (Mothership.Ord.Status == ACTIVE)  // Jika Mothership statusnya "ACTIVE"
+  {
+    display.drawBitmap(Mothership.Ord.X, Mothership.Ord.Y, MOTHERSHIP_GFX, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT, WHITE);  // Gambar MOTHERSHIP_GFX ke display
+  } else if (Mothership.Ord.Status == EXPLODING)                                                                          // Jika Mothership statusnya "EXPLODING"
+  {
+    for (i = 0; i < MOTHERSHIP_WIDTH; i += 2)  // Randomisasi ledakan untuk MOTHERSHIP
+    {
+      display.drawBitmap(Mothership.Ord.X + i, Mothership.Ord.Y, EXPLOSION_GFX, random(4) + 2, MOTHERSHIP_HEIGHT, WHITE);  // Gambar EXPLOSION_GFX dan disesuaikan dengan variable "i"
+    }
+    Mothership.ExplosionGfxCounter--;         // Kurangi timer "ExplosionGfxCounter"
+    if (Mothership.ExplosionGfxCounter == 0)  // Jika waktu timer habis
+    {
+      Mothership.Ord.Status = DESTROYED;  // Atur status Mothership menjadi "DESTROYED"
+    }
+  }
+
+  // GAMBAR BONUS ANGKA MOTHERSHIP
+  if (MothershipBonusCounter > 0)  // Cek jika "MothershipBonusCounter" lebih dari 0
+  {
+    display.setCursor(MothershipBonusXPos, 0);  // Atur lokasi tulis teks pada lokasi X "MothershipBonusXPos"
+    display.print(MothershipBonus);             // Tampilkan jumlah bonus point yang didapatkan
+    MothershipBonusCounter--;                   // Hitung mundur nilai agar tidak permanen di layar
+  }
+
   display.display();  // Memunculkan semua gambar display
 }
 
@@ -340,7 +401,7 @@ void InitPlayer() {
 }
 
 // Fungsi untuk mengkontrol pemain
-void PlayerControl() {
+void PlayerControlUpdate() {
   if ((digitalRead(RIGHT_BUTTON) == false) && (Player.Ord.X + PLAYER_WIDTH < SCREEN_WIDTH))  // Jika tombol ke kanan ditekan dan badan pesawat lebih kecil dari lebar layar
   {
     Player.Ord.X += PLAYER_X_MOVE_AMOUNT;  // Majukan pemain ke kanan
@@ -359,7 +420,7 @@ void PlayerControl() {
 }
 
 // Fungsi untuk mengatur peluru
-void BulletControl() {
+void BulletControlUpdate() {
   if (Bullet.Ord.Status == ACTIVE)  // Jika status peluru aktif
   {
     Bullet.Ord.Y -= BULLET_SPEED;          // Jalankan peluru keatas
@@ -372,6 +433,7 @@ void BulletControl() {
 
 // Fungsi InitInvaders dengan argumen int untuk permulaan lokasi Y
 void InitInvaders(int YSTART) {
+  //BAGIAN INVADER
   for (int across = 0; across < NUM_INVADER_COLUMNS; across++)  // Looping dan cek untuk baris ke kanan
   {
     for (int down = 0; down < NUM_INVADER_ROWS; down++)  // Looping dan cek untuk baris ke bawah
@@ -383,17 +445,21 @@ void InitInvaders(int YSTART) {
       kita perlu menyesuaikan sedikit karena baris nol seharusnya 2, baris 1 seharusnya 1 dan baris paling bawah 0
       */
 
-      // Melakukan kalkulasi letak koordinat masing-masing Invader (masing-masing beda) mulai dari X lanjut ke Y;
-      Invader[across][down].Ord.X = X_START_OFFSET + (across * (INVADER_WIDTH + SPACE_BETWEEN_INVADER_COLUMNS)) - down;
-      Invader[across][down].Ord.Y = YSTART + (down * SPACE_BETWEEN_INVADER_ROWS);
-      Invader[across][down].Ord.Status = ACTIVE;
-      Invader[across][down].ExplosionGfxCounter = EXPLOSION_GFX_TIME;
+      Invader[across][down].Ord.X = X_START_OFFSET + (across * (INVADER_WIDTH + SPACE_BETWEEN_INVADER_COLUMNS)) - down;  // Melakukan kalkulasi letak koordinat X Invader
+      Invader[across][down].Ord.Y = YSTART + (down * SPACE_BETWEEN_INVADER_ROWS);                                        // Melakukan kalkulasi letak koordinat Y Invader
+      Invader[across][down].Ord.Status = ACTIVE;                                                                         // Mengaktifkan status Invader
+      Invader[across][down].ExplosionGfxCounter = EXPLOSION_GFX_TIME;                                                    // Mengatur waktu Invader apabila ditembak
     }
   }
+
+  // BAGIAN MOTHERSHIP
+  Mothership.Ord.X = -MOTHERSHIP_WIDTH;  // Atur lokasi X Mothership sesuai dengan nilai negatif lebar gambar
+  Mothership.Ord.Y = 0;                 // Atur lokasi Y Mothership diatas layar
+  Mothership.Ord.Status = DESTROYED;    // Atur status menjadi "DESTROYED"
 }
 
 // Buat mengontrol jalan invaders
-void InvaderControl() {
+void InvaderControlUpdate() {
   if ((InvadersMoveCounter--) < 0)  // Cek jika jalan invaders (12) dibawah 0
   {
     bool Dropped = false;                                                                                   // buat variable "Dropped" untuk mengatur invaders turun kebawah
@@ -423,12 +489,49 @@ void InvaderControl() {
   }
 }
 
-// Fungsi cek kolisi
-void CheckCollisions() {
-  BulletAndInvaderCollisions();  // Jalankan fungsi BulletAndInvaderCollisions
+// Fungsi untuk logika update Mothership
+void MothershipControlUpdate() {
+  if (Mothership.Ord.Status == ACTIVE)  // Jika status Mothership "ACTIVE"
+  {
+    Mothership.Ord.X += MothershipSpeed;  // Gerak koordinat X Mothership sesuai dengan "MothershipSpeed"
+    if (MothershipSpeed > 0)              // Jika "MothershipSpeed" lebih besar dari 0 (Ke kanan)
+    {
+      if (Mothership.Ord.X >= SCREEN_WIDTH)  // Jika Mothership keluar dari layar kanan
+      {
+        Mothership.Ord.Status = DESTROYED;  // Ubah status Mothership jadi "DESTROYED"
+      }
+    } else  // Jika "MothershipSpeed" lebih kecil dari 0 (Ke kiri)
+    {
+      if (Mothership.Ord.X + MOTHERSHIP_WIDTH < 0)  // Jika Mothership keluar dari layar kiri
+      {
+        Mothership.Ord.Status = DESTROYED;  // Ubah status Mothership jadi "DESTROYED"
+      }
+    }
+  } else  // Jika status Mothership bukan "ACTIVE"
+  {
+    if (random(MOTHERSHIP_SPAWN_CHANCE) == 1)  // Jika kemungkinan "MOTHERSHIP_SPAWN_CHANCE" (0-249 / 1-250(????????)) dan dapat hasil 1
+    {
+      Mothership.Ord.Status = ACTIVE;  // Aktifkan status Mothership
+      if (random(2) == 1)              // Jika kemungkinan angka dari 0-1 dan hasilnya 1
+      {
+        Mothership.Ord.X = SCREEN_WIDTH;      // Atur lokasi X Mothership dibagian pojok kanan layar
+        MothershipSpeed = -MOTHERSHIP_SPEED;  // Dan atur kecepatan Mothership menjadi negatif
+      } else                                  // Jika kemungkinan angka dari 0-1 dan hasilnya bukan 1 (0)
+      {
+        Mothership.Ord.X = -MOTHERSHIP_WIDTH;  // Atur lokasi X Mothership dibagian pojok kiri layar
+        MothershipSpeed = MOTHERSHIP_SPEED;    // Dan atur kecepatan Mothership menjadi positif
+      }
+    }
+  }
 }
 
-// Fungsi untuk mengecek kolosi antara Bullet dan Invader
+// Fungsi cek kolisi
+void CheckCollisionsUpdate() {
+  BulletAndInvaderCollisions();  // Jalankan fungsi BulletAndInvaderCollisions untuk cek tabarakan
+  MothershipCollision();         // Jalankan fungsi MothershipCollision untuk cek tabarakan
+}
+
+// Fungsi untuk mengecek tabarakan antara Bullet dan Invader
 void BulletAndInvaderCollisions() {
   for (int across = 0; across < NUM_INVADER_COLUMNS; across++)  // Jika variablle "across" lebih kecil dari jumlah kolom Invader
   {
@@ -449,9 +552,47 @@ void BulletAndInvaderCollisions() {
   }
 }
 
-// Fungsi untuk mengecek kolosi dengan argumen yang dibawah
+// // Fungsi untuk mengecek tabarakan antara Bullet dan Mothership
+void MothershipCollision() {
+  if ((Bullet.Ord.Status == ACTIVE) && (Mothership.Ord.Status == ACTIVE))  // Jika status Bullet dan Mothership "ACTIVE"
+  {
+    if (Collision(Bullet.Ord, BULLET_WIDTH, BULLET_HEIGHT, Mothership.Ord, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT))  // Jika tabrakan terjadi
+    {
+      Mothership.Ord.Status = EXPLODING;                    // Atur status Mothership menjadi "EXPLODING"
+      Mothership.ExplosionGfxCounter = EXPLOSION_GFX_TIME;  // Mengatur waktu Invader apabila ditembak
+      Bullet.Ord.Status = DESTROYED;                        // Mengubah status peluru menjadi "DESTROYED"
+      MothershipBonus = random(4);                          // GACHA! (Pilih angka random dari (0-3))
+      switch (MothershipBonus)                              // Cek kondisi dari gacha (angka random) "MothershipBonus"
+      {
+        case 0:                   // Jika nilainya 0
+          MothershipBonus = 50;   // Atur "MothershipBonus" mendapatkan nilai bonus 50
+          break;                  // Keluar dari switch statement
+        case 1:                   // Jika nilainya 1
+          MothershipBonus = 100;  // Atur "MothershipBonus" mendapatkan nilai bonus 100
+          break;                  // Keluar dari switch statement
+        case 2:                   // Jika nilainya 2
+          MothershipBonus = 150;  // Atur "MothershipBonus" mendapatkan nilai bonus 150
+          break;                  // Keluar dari switch statement
+        case 3:                   // Jika nilainya 3
+          MothershipBonus = 200;  // Atur "MothershipBonus" mendapatkan nilai bonus 200
+          break;                  // Keluar dari switch statement
+      }
+      MothershipBonusXPos = Mothership.Ord.X;  // Atur posisi Mothership bonus koordinat X dengan lokasi Mothership koordinat X
+      if (MothershipBonusXPos > 100)           // Jika lokasi Mothership bonus melebihi nilai 100 (melewati layar kanan)
+      {
+        MothershipBonusXPos = 100;         // Atur letak koordinat X untuk memastikan tidak setengah dari sisi kanan layar
+      } else if (MothershipBonusXPos < 0)  // Jika lokasi Mothership bonus lebih kecil dari 0 (melewati layar kiri)
+      {
+        MothershipBonusXPos = 0;  // Atur letak koordinat X untuk memastikan tidak setengah dari sisi kiri layar
+      }
+      MothershipBonusCounter = DISPLAY_MOTHERSHIP_BONUS_TIME;  // Mengatur "MothershipBonusCounter" untuk durasi yang ditampilkan di layar
+    }
+  }
+}
+
+// Fungsi untuk mengecek tabarakan dengan argumen yang dibawah
 bool Collision(GameObjectStruct OBJECT1, unsigned char WIDTH1, unsigned char HEIGHT1, GameObjectStruct OBJECT2, unsigned char WIDTH2, unsigned char HEIGHT2) {
-  // Mengembalikan nilai "true" jika 2 obek ter-kolosi
+  // Mengembalikan nilai "true" jika 2 obek ter-tabarakan
   return ((OBJECT1.X + WIDTH1 > OBJECT2.X) && (OBJECT1.X < OBJECT2.X + WIDTH2) && (OBJECT1.Y + HEIGHT1 > OBJECT2.Y) && (OBJECT1.Y < OBJECT2.Y + WIDTH2));
 }
 
