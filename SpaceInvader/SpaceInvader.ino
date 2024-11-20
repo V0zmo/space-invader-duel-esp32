@@ -29,13 +29,13 @@ DFRobotDFPlayerMini mpPlayer;                           // Membuat MP Player
 SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);  // Buat SoftwareSerial dengan pin TX/RX
 
 // BAGIAN TOMBOL
-#define SHOOT_BUTTON 13  // Pin tombol 1
-#define LEFT_BUTTON 12   // Pin tombol 2
+#define SHOOT_BUTTON 12  // Pin tombol 1
+#define LEFT_BUTTON 13   // Pin tombol 2
 #define RIGHT_BUTTON 14  // Pin tombol 3
 
 // BAGIAN GLOBAL GAME
-#define ACTIVE 0              // status konstanta objek permainan
-bool AnimationFrame = false;  // false = Diam | true = Jalan
+#define ACTIVE 0     // Status konstanta aktif objek permainan
+#define DESTROYED 2  // Status konstanta hancur objek permainan
 // Struktur game global, Objek dasar yang akan disertakan oleh sebagian besar objek lain
 struct GameObjectStruct {
   signed int X;          // Lokasi X
@@ -44,29 +44,37 @@ struct GameObjectStruct {
 };
 
 // BAGIAN PLAYER
-#define PLAYER_WIDTH 16         // Lebar player
-#define PLAYER_HEIGHT 16        // Tinggi player
+#define PLAYER_WIDTH 8          // Lebar player
+#define PLAYER_HEIGHT 8         // Tinggi player
 #define PLAYER_X_MOVE_AMOUNT 2  // Kecepatan jalan player dalam pixel
 #define PLAYER_X_START 0        // Lokasi mulai player dalam koordinat X
-#define PLAYER_Y_START 48       // Lokasi mulai player dalam koordinat Y
+#define PLAYER_Y_START 56       // Lokasi mulai player dalam koordinat Y
 // Struktur untuk Player
 struct PlayerStruct {
   GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
 };
 PlayerStruct Player;  // Player global variable
 
+// BAGIAN MISIL / PELURU
+#define BULLET_WIDTH 8     // Lebar peluru
+#define BULLET_HEIGHT 8    // Panjang peluru
+#define BULLET_SPEED 4     // Kecepatana peluru (semakin besar semakin cepat)
+bool BulletFrame = false;  // false = Diam | true = Jalan
+GameObjectStruct Bullet;   // Objek peluru
+
 // BAGIAN INVADER
-#define NUM_INVADER_COLUMNS 3            // Jumlah invader lurus ke kanan
+#define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
 #define NUM_INVADER_ROWS 3               // Jumlah invader lurus ke bawah
 #define SPACE_BETWEEN_INVADER_COLUMNS 5  // Jarak antara invader dari kanan
 #define SPACE_BETWEEN_INVADER_ROWS 16    // Jarak antara invader dari bawah
-#define INVADER_WIDTH 16                 // Ukuran lebar terbesar invader
-#define INVADER_HEIGHT 16                // Ukuran lebar terbesar invader
+#define INVADER_WIDTH 8                  // Ukuran lebar terbesar invader
+#define INVADER_HEIGHT 8                 // Ukuran lebar terbesar invader
 #define X_START_OFFSET 6                 // Offset X lokasi invader
 #define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
 #define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
 signed char InvaderXMoveAmount = 2;      // Kecepatan jalan invaders dalam pixel
 signed char InvadersMoveCounter;         // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
+bool InvaderFrame = false;               // false = Diam | true = Jalan
 // Struktur untuk Invader
 struct InvaderStruct {
   GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
@@ -82,143 +90,112 @@ hexadecimal, untuk permudah bacaan dan ringkas kode. Apabila kesulitan bisa meng
 angka biner.
 */
 
+// Graphics Player
 static const unsigned char PROGMEM PLAYER_GFX[] = {
-  0x01, 0x80,
-  0x03, 0xc0,
-  0x03, 0xc0,
-  0x03, 0xc0,
-  0x67, 0xe6,
-  0x6f, 0xf6,
-  0x7f, 0xfe,
-  0x7f, 0xfe,
-  0x7f, 0xfe,
-  0xff, 0xff,
-  0xff, 0xff,
-  0xff, 0xff,
-  0xe7, 0xe7,
-  0x0f, 0xf0,
-  0x1f, 0xf8,
-  0x1f, 0xf8
+  0x18,
+  0x18,
+  0x18,
+  0x3c,
+  0xbd,
+  0xbd,
+  0xff,
+  0xdb
+};
+
+// Graphics Bullet 1
+static const unsigned char PROGMEM BULLET1_GFX[] = {
+  0x18,
+  0x18,
+  0x18,
+  0x00,
+  0x18,
+  0x18,
+  0x18,
+  0x00
+};
+
+// Graphics Bullet 2
+static const unsigned char PROGMEM BULLET2_GFX[] = {
+  0x18,
+  0x24,
+  0x00,
+  0x18,
+  0x24,
+  0x00,
+  0x18,
+  0x24
 };
 
 // Graphics Musuh 1 (Diam)
 static const unsigned char PROGMEM INVADER_1_GFX_01[] = {
-  0x60, 0x06,
-  0x30, 0x0c,
-  0x10, 0x08,
-  0x3f, 0xfc,
-  0x7f, 0xfe,
-  0xff, 0xff,
-  0xe7, 0xe7,
-  0xe7, 0xe7,
-  0xff, 0xff,
-  0xff, 0xff,
-  0xff, 0xff,
-  0xb0, 0x0d,
-  0xb0, 0x0d,
-  0x8e, 0x71,
-  0x0e, 0x70,
-  0x00, 0x00
+  0x24,
+  0xff,
+  0x5a,
+  0xff,
+  0xdb,
+  0xc3,
+  0x66,
+  0x24
 };
 
 // Graphics Musuh 1 (Jalan)
 static const unsigned char PROGMEM INVADER_1_GFX_02[] = {
-  0x0c, 0x30,
-  0x18, 0x18,
-  0x10, 0x08,
-  0x3f, 0xfc,
-  0x7f, 0xfe,
-  0xff, 0xff,
-  0xef, 0xf7,
-  0xe7, 0xe7,
-  0xff, 0xff,
-  0xff, 0xff,
-  0xff, 0xff,
-  0xb0, 0x0d,
-  0xb0, 0x0d,
-  0xb0, 0x0d,
-  0x60, 0x06,
-  0x60, 0x06
+  0x42,
+  0xff,
+  0x5a,
+  0xff,
+  0xdb,
+  0xc3,
+  0xc3,
+  0x42
 };
 
 // Graphics Musuh 2 (Diam)
 static const unsigned char PROGMEM INVADER_2_GFX_01[] = {
-  0x1f, 0xf8,
-  0x3f, 0xfc,
-  0x7e, 0x7e,
-  0xfc, 0x3f,
-  0xf8, 0x1f,
-  0xf8, 0x1f,
-  0xf8, 0x1f,
-  0xfc, 0x3f,
-  0xff, 0xff,
-  0xbf, 0xfd,
-  0x9f, 0xf9,
-  0x8f, 0xf1,
-  0x7f, 0xfe,
-  0x7b, 0xde,
-  0x7d, 0xbe,
-  0x3d, 0xbc
+  0x3c,
+  0x7e,
+  0xe7,
+  0xc3,
+  0xe7,
+  0xbd,
+  0x7e,
+  0x5a
 };
 
 // Graphics Musuh 2 (Jalan)
 static const unsigned char PROGMEM INVADER_2_GFX_02[] = {
-  0x1f, 0xf8,
-  0x3f, 0xfc,
-  0x7e, 0x7e,
-  0xfc, 0x3f,
-  0xf8, 0x1f,
-  0xf8, 0x1f,
-  0xf8, 0x1f,
-  0xfc, 0x3f,
-  0xff, 0xff,
-  0xbf, 0xfd,
-  0x5f, 0xfa,
-  0x2f, 0xf4,
-  0x7f, 0xfe,
-  0x7b, 0xde,
-  0xf1, 0x8f,
-  0xf1, 0x8f
+  0xbd,
+  0xff,
+  0xe7,
+  0xc3,
+  0x66,
+  0x3c,
+  0x7e,
+  0x99
 };
 
 // Graphics Musuh 3 (Diam)
 static const unsigned char PROGMEM INVADER_3_GFX_01[] = {
-  0x06, 0x60,
-  0x0e, 0x70,
-  0xff, 0xff,
-  0x7f, 0xfe,
-  0x13, 0xc8,
-  0x7d, 0xbe,
-  0xff, 0xff,
-  0xfb, 0xdf,
-  0x72, 0x4e,
-  0x72, 0x4e,
-  0x72, 0x4e,
-  0x38, 0x1c,
-  0x3c, 0x3c,
-  0x1c, 0x38,
-  0x0c, 0x30,
-  0x0c, 0x30
+  0xc3,
+  0x7e,
+  0xff,
+  0x99,
+  0xff,
+  0xff,
+  0xa5,
+  0xbd
 };
 
 // Graphics Musuh 3 (Jalan)
 static const unsigned char PROGMEM INVADER_3_GFX_02[] = {
-  0x06, 0x60,
-  0x0e, 0x70,
-  0xff, 0xff,
-  0x7f, 0xfe,
-  0x13, 0xc8,
-  0x7d, 0xbe,
-  0xff, 0xff,
-  0xfb, 0xdf,
-  0x72, 0x4e,
-  0x74, 0x2e,
-  0x74, 0x2e,
-  0x70, 0x0e,
-  0x60, 0x06,
-  0x60, 0x06,
-  0x60, 0x06,
-  0x60, 0x06
+  0x66,
+  0x7e,
+  0xff,
+  0xbd,
+  0x99,
+  0xff,
+  0xa5,
+  0x99
 };
 
 void setup() {
@@ -257,8 +234,10 @@ void loop() {
 
 // Fungsi Update untuk semua yang berhubungan dengan logika atau perhitungan dalam kodingan
 void Update() {
-  InvaderControl();  // Fungsi logika Invader
-  PlayerControl();   // Fungsi logika Player
+  InvaderControl();   // Fungsi logika Invader
+  PlayerControl();    // Fungsi logika Player
+  BulletControl();    // Fungsi logika Bullet
+  CheckCollisions();  // Fungsi logika pengecekan kolisi
 }
 
 // Fungsi Draw untuk semua urusan yang berhubungan gambar
@@ -268,45 +247,56 @@ void Draw() {
   {
     for (int down = 0; down < NUM_INVADER_ROWS; down++)  // Looping dan cek untuk baris ke bawah
     {
-      switch (down)  // Check nomor dari variable "down" dan gambar sesuai baris kebawah musuh
+      if (Invader[across][down].Ord.Status == ACTIVE)  // Jika Invader memiliki status "ACTIVE"
       {
-        case 0:                 // Jika 0 (atas)
-          if (!AnimationFrame)  // Jika AnimationFrame = false
-          {
-            display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_1_GFX_01, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 1 (Diam)
-          } else                                                                                                                                   // Jika AnimationFrame = true
-          {
-            display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_1_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 1 (Jalan)
-          }
-          break;                // Lepas dari switch statement
-        case 1:                 // Jika 1 (tengah)
-          if (!AnimationFrame)  // Jika AnimationFrame = false
-          {
-            display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_2_GFX_01, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 2 (Diam)
-          } else                                                                                                                                   // Jika AnimationFrame = true
-          {
-            display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_2_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 2 (Jalan)
-          }
-          break;                // Lepas dari switch statement
-        default:                // Jika bukan keduanya (2 (Bawah))
-          if (!AnimationFrame)  // Jika AnimationFrame = false
-          {
-            display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_3_GFX_01, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 3 (Diam)
-          } else                                                                                                                                   // Jika AnimationFrame = true
-          {
-            display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_3_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 3 (Jalan)
-          }
+        switch (down)  // Check nomor dari variable "down" dan gambar sesuai baris kebawah musuh
+        {
+          case 0:               // Jika 0 (atas)
+            if (!InvaderFrame)  // Jika InvaderFrame = false
+            {
+              display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_1_GFX_01, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 1 (Diam)
+            } else                                                                                                                                   // Jika InvaderFrame = true
+            {
+              display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_1_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 1 (Jalan)
+            }
+            break;              // Lepas dari switch statement
+          case 1:               // Jika 1 (tengah)
+            if (!InvaderFrame)  // Jika InvaderFrame = false
+            {
+              display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_2_GFX_01, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 2 (Diam)
+            } else                                                                                                                                   // Jika InvaderFrame = true
+            {
+              display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_2_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 2 (Jalan)
+            }
+            break;              // Lepas dari switch statement
+          default:              // Jika bukan keduanya (2 (Bawah))
+            if (!InvaderFrame)  // Jika InvaderFrame = false
+            {
+              display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_3_GFX_01, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 3 (Diam)
+            } else                                                                                                                                   // Jika InvaderFrame = true
+            {
+              display.drawBitmap(Invader[across][down].Ord.X, Invader[across][down].Ord.Y, INVADER_3_GFX_02, INVADER_WIDTH, INVADER_HEIGHT, WHITE);  // Gambar Invader 3 (Jalan)
+            }
+        }
       }
     }
   }
   display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
-  display.display();                                                                               // Memunculkan semua gambar display
+  if (Bullet.Status == ACTIVE) {
+    if (!BulletFrame) {
+      display.drawBitmap(Bullet.X, Bullet.Y, BULLET1_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
+    } else {
+      display.drawBitmap(Bullet.X, Bullet.Y, BULLET2_GFX, BULLET_WIDTH, BULLET_HEIGHT, WHITE);
+    }
+  }
+  display.display();  // Memunculkan semua gambar display
 }
 
 // Inisiasi untuk Player
 void InitPlayer() {
   Player.Ord.X = PLAYER_X_START;  // Atur lokasi awal X player
   Player.Ord.Y = PLAYER_Y_START;  // Atur lokasi awal Y player
+  Bullet.Status = DESTROYED;
 }
 
 // Fungsi untuk mengkontrol pemain
@@ -318,6 +308,25 @@ void PlayerControl() {
   if ((digitalRead(LEFT_BUTTON) == false) && (Player.Ord.X > 0))  // Jika tombol ke kiri ditekan dan badan pesawat lebih besar dari 0 (ujung kiri layar)
   {
     Player.Ord.X -= PLAYER_X_MOVE_AMOUNT;  // Majukan pemain ke kiri
+  }
+  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
+  {
+    Bullet.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
+    Bullet.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
+    Bullet.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
+  }
+}
+
+// Fungsi untuk mengatur peluru
+void BulletControl() {
+  if (Bullet.Status == ACTIVE)  // Jika status peluru aktif
+  {
+    Bullet.Y -= BULLET_SPEED;          // Jalankan peluru keatas
+    if (Bullet.Y + BULLET_HEIGHT < 0)  // Jika peluru melewati layar atas
+    {
+      Bullet.Status = DESTROYED;  // Ubah status peluru menjadi "DESTROYED" (hancur)
+    }
+    BulletFrame = !BulletFrame;  // Ubah frame
   }
 }
 
@@ -368,8 +377,40 @@ void InvaderControl() {
       }
     }
     InvadersMoveCounter = INVADERS_SPEED;  // Reset InvadersMoveCounter dengan INVADERS_SPEED (12)
-    AnimationFrame = !AnimationFrame;      // Tukar frame dengan frame lain
+    InvaderFrame = !InvaderFrame;          // Tukar frame dengan frame lain
   }
+}
+
+// Fungsi cek kolisi
+void CheckCollisions() {
+  BulletAndInvaderCollisions();  // Jalankan fungsi BulletAndInvaderCollisions
+}
+
+// Fungsi untuk mengecek kolosi antara Bullet dan Invader
+void BulletAndInvaderCollisions() {
+  for (int across = 0; across < NUM_INVADER_COLUMNS; across++)  // Jika variablle "across" lebih kecil dari jumlah kolom Invader
+  {
+    for (int down = 0; down < NUM_INVADER_ROWS; down++)  // Jika variable "across" lebih kecil dari jumlah baris bawah Invader
+    {
+      if (Invader[across][down].Ord.Status == ACTIVE)  // Jika status Invader "ACTIVE"
+      {
+        if (Bullet.Status == ACTIVE)  // Jika status "Bullet" "ACTIVE"
+        {
+          if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Cek jika funsi Collision() memberikan statement true
+          {
+            Invader[across][down].Ord.Status = DESTROYED;  // Ubah status Invader menjadi "DESTROYED"
+            Bullet.Status = DESTROYED;                     // Ubah status peluru menjadi "DESTROYED"
+          }
+        }
+      }
+    }
+  }
+}
+
+// Fungsi untuk mengecek kolosi dengan argumen yang dibawah
+bool Collision(GameObjectStruct OBJECT1, unsigned char WIDTH1, unsigned char HEIGHT1, GameObjectStruct OBJECT2, unsigned char WIDTH2, unsigned char HEIGHT2) {
+  // Mengembalikan nilai "true" jika 2 obek ter-kolosi
+  return ((OBJECT1.X + WIDTH1 > OBJECT2.X) && (OBJECT1.X < OBJECT2.X + WIDTH2) && (OBJECT1.Y + HEIGHT1 > OBJECT2.Y) && (OBJECT1.Y < OBJECT2.Y + WIDTH2));
 }
 
 // Cek invader mana yang paling kanan
