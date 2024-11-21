@@ -43,9 +43,12 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define PLAYER_X_MOVE_AMOUNT 2  // Kecepatan jalan player dalam pixel
 #define PLAYER_X_START 0        // Lokasi mulai player dalam koordinat X
 #define PLAYER_Y_START 56       // Lokasi mulai player dalam koordinat Y
+#define PLAYER_LIVES 3          // Nyawa pemain
 #define BULLET_WIDTH 2          // Lebar peluru
 #define BULLET_HEIGHT 7         // Panjang peluru
 #define BULLET_SPEED 4          // Kecepatana peluru (semakin besar semakin cepat)
+
+// BAGIAN TEMBOK
 
 // BAGIAN MOTHERSHIP
 #define MOTHERSHIP_WIDTH 8                // Panjang Mothership
@@ -55,25 +58,22 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define DISPLAY_MOTHERSHIP_BONUS_TIME 25  // Berapa lama bonus tetap berada di layar untuk menampilkan Mothership
 
 // BAGIAN INVADER
-#define NUM_INVADER_COLUMNS 7                  // Jumlah invader lurus ke kanan
-#define NUM_INVADER_ROWS 3                     // Jumlah invader lurus ke bawah
-#define SPACE_BETWEEN_INVADER_COLUMNS 5        // Jarak antara invader dari kanan
-#define SPACE_BETWEEN_INVADER_ROWS 16          // Jarak antara invader dari bawah
-#define INVADER_WIDTH 8                        // Ukuran lebar terbesar invader
-#define INVADER_HEIGHT 8                       // Ukuran lebar terbesar invader
-#define X_START_OFFSET 6                       // Offset X lokasi invader
-#define INVADER_Y_START MOTHERSHIP_HEIGHT - 1  // Atur awal mula Invader muncul
-#define AMOUNT_TO_DROP_PER_LEVEL 4             // Seberapa jauh Invader turun tiap level baru
-#define INVADERS_DROP 4                        // Seberapa jauh invader jatuh dalam pixel
-#define INVADERS_SPEED 12                      // Kecepatan invader (semakin rendah semakin cepat)
-#define LEVEL_RESET_TO_START_HEIGHT 4          // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
-#define ALIEN_X_MOVE_AMOUNT 1                  // Jumlah pixel tiap mulai ronde baru
-#define CHANCE_ATTACK 20                       // Semakin besar semakin kecil persentase Invader menyerang pemain
-#define ATTACK_WIDTH 4                         // Lebar serangan Invader
-#define ATTACK_HEIGHT 8                        // Tinggi serangan Invader
-#define MAX_ATTACK 3                           // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
-
-// < TERAKHIR DIUBAH > 
+#define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
+#define NUM_INVADER_ROWS 3               // Jumlah invader lurus ke bawah
+#define SPACE_BETWEEN_INVADER_COLUMNS 5  // Jarak antara invader dari kanan
+#define SPACE_BETWEEN_INVADER_ROWS 16    // Jarak antara invader dari bawah
+#define INVADER_WIDTH 8                  // Ukuran lebar terbesar invader
+#define INVADER_HEIGHT 8                 // Ukuran lebar terbesar invader
+#define X_START_OFFSET 6                 // Offset X lokasi invader
+#define AMOUNT_TO_DROP_PER_LEVEL 4       // Seberapa jauh Invader turun tiap level baru
+#define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
+#define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
+#define LEVEL_RESET_TO_START_HEIGHT 4    // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
+#define INVADER_X_MOVE_AMOUNT 1          // Jumlah pixel tiap mulai ronde baru
+#define CHANCE_ATTACK 20                 // Semakin besar semakin kecil persentase Invader menyerang pemain
+#define ATTACK_WIDTH 4                   // Lebar serangan Invader
+#define ATTACK_HEIGHT 8                  // Tinggi serangan Invader
+#define MAX_ATTACK 3                     // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
 
 // STRUKTUR GAME
 
@@ -86,9 +86,13 @@ struct GameObjectStruct {
 
 // Struktur untuk Player
 struct PlayerStruct {
-  GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
-  unsigned int Score;    // Skor untuk masing-masing player (Saat Multiplayer)
-  unsigned int Lives;    // Nyawa player
+  GameObjectStruct Ord;               // Inisiasi class GameObjectStruct
+  unsigned int Score;                 // Skor untuk masing-masing player (Saat Multiplayer)
+  unsigned int Lives;                 // Nyawa player
+  unsigned char Level;                // Level stage pemain yang diraih
+  unsigned char KillCount;            // Invader yang dibunuh
+  unsigned char InvaderSpeed;         // Semakin tinggi semakin lambat, di kalkulasi saat Invader dibunuh
+  unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
 };
 
 // Struktur untuk Invader
@@ -104,7 +108,8 @@ static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
 static const uint8_t PIN_MP3_RX = 27;  // Menghubungkan ke TX modul
 
 // Global game
-unsigned int HighScore;  // Skor tertinggi dalam game secara global
+unsigned int HighScore;   // Skor tertinggi dalam game secara global
+bool GameInPlay = false;  // Apakah game sedang dimainkan
 
 // Global Mothership
 signed char MothershipSpeed;           // Kecepatan Mothership dalam pixel yang dapat diubah
@@ -113,20 +118,24 @@ signed int MothershipBonusXPos;        // Lokasi koordinat X pada Mothership bon
 unsigned char MothershipBonusCounter;  // Berapa banyak ketemu Mothership bonus
 
 // Global Invader
-signed char InvaderXMoveAmount = 2;  // Kecepatan jalan invaders dalam pixel
-signed char InvadersMoveCounter;     // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
-bool InvaderFrame = false;           // false = Diam | true = Jalan
+static const int TOTAL_INVADER = NUM_INVADER_COLUMNS * NUM_INVADER_ROWS;  // Total semua Invader
+signed char InvaderXMoveAmount = 2;                                       // Kecepatan jalan invaders dalam pixel
+signed char InvadersMoveCounter;                                          // menghitung mundur, ketika 0 memindahkan invader, atur sesuai dengan berapa banyak alien di layar (Tersambung tidak langsung dengan INVADERS_SPEED)
+bool InvaderFrame = false;                                                // false = Diam | true = Jalan
 
 // Inisiasi Library dan Struktur Game
 
+// System
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);  // Deklarasi untuk layar SSD1306 yang tersambung ke I2C (SDA, pin SCL)
 DFRobotDFPlayerMini mpPlayer;                                              // Membuat MP Player
 SoftwareSerial softwareSerial(PIN_MP3_RX, PIN_MP3_TX);                     // Buat SoftwareSerial dengan pin TX/RX
 Preferences preferences;                                                   // Inisiasi class preferences dari library <Preferences.h>
-GameObjectStruct Bullet;                                                   // Inisiasi class Bullet
-PlayerStruct Player;                                                       // Player global variable
-InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];              // Buat Invader dengan multidimension array (seperti tabel)
-InvaderStruct Mothership;                                                  // Buat Mothership
+// Game global variable
+GameObjectStruct Bullet;                                       // Inisiasi class Bullet
+PlayerStruct Player;                                           // Player global variable
+InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
+InvaderStruct Mothership;                                      // Buat Mothership
+GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek serangan musuh
 
 // Graphics Player
 static const unsigned char PROGMEM PLAYER_GFX[] = {
@@ -153,14 +162,14 @@ static const unsigned char PROGMEM PLAYER_BULLET[] = {
 
 // Graphics Bullet 2
 static const unsigned char PROGMEM INVADER_BULLET[] = {
-  0x60,
   0x90,
-  0x00,
   0x60,
+  0x00,
   0x90,
-  0x00,
   0x60,
-  0x90
+  0x00,
+  0x90,
+  0x60,
 };
 
 // Graphics Musuh 1 (Diam)
@@ -273,50 +282,75 @@ void setup() {
 
   // Cek jika Display monitor tidak dapat tersambung
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));
-    for (;;)
+    Serial.println(F("SSD1306 allocation failed"));  // Tampilkan error dalam Serial Monitor
+    for (;;)                                         // Agar tidak looping
       ;
   }
 
   // Cek jika MP Player tidak dapat tersambung
   if (!mpPlayer.begin(softwareSerial)) {
-    Serial.println("Connecting to DFPlayer Mini failed!");
+    Serial.println("Connecting to DFPlayer Mini failed!");  // Tampilkan error dalam Serial Monitor
   }
 
-  preferences.begin("storage", false);
-  preferences.getInt("HighScore", 0);
+  preferences.begin("storage", false);             // Buat penyimpanan atau buka bernama "storage" dengan mode Read & Write
+  HighScore = preferences.getInt("HighScore", 0);  // Baca data "HighScore"
+  preferences.end();                               // Tutup penyimpanan saat tidak diperlukan
 
   // Inisiasi untuk permainan
 
-  display.setTextSize(1);
-  display.setTextColor(WHITE);
+  display.setTextSize(1);       // Atur ukuran teks
+  display.setTextColor(WHITE);  // Atur warna teks
 
-  InitInvaders(INVADER_Y_START);
-  InitPlayer();
+  InitInvaders(0);  // Manggil fungsi penciptaan Invader
+  InitPlayer();     // Manggil fungsi penciptaan Player
 }
 
 void loop() {
-  Update();  // Perulangan logika game
-  Draw();    // Perulangan pergambaran game
+  if (GameInPlay)  // Jika game sedang berlangsung
+  {
+    Update();  // Perulangan logika game
+    Draw();    // Perulangan pergambaran game
+  } else       // Jika game tidak berlangsung
+  {
+    MenuScreen();  // Fungsi layar menu
+  }
 }
 
 // Fungsi Update untuk semua yang berhubungan dengan logika atau perhitungan dalam kodingan
 void Update() {
-  InvaderControlUpdate();     // Fungsi logika Invader
-  MothershipControlUpdate();  //Fungsi logika Mothership
-  PlayerControlUpdate();      // Fungsi logika Player
-  BulletControlUpdate();      // Fungsi logika Bullet
-  CheckCollisionsUpdate();    // Fungsi logika pengecekan kolisi
+  if (Player.Ord.Status == ACTIVE)  // Jika pemain masih hidup
+  {
+    InvaderControlUpdate();     // Fungsi logika Invader
+    MothershipControlUpdate();  //Fungsi logika Mothership
+    PlayerControlUpdate();      // Fungsi logika Player
+    BulletControlUpdate();      // Fungsi logika Bullet
+    CheckCollisionsUpdate();    // Fungsi logika pengecekan kolisi
+  }
 }
 
 // Fungsi Draw untuk semua urusan yang berhubungan gambar
 void Draw() {
-  int i;
+  int i;  // Index pengulangan
 
   display.clearDisplay();  // Menghilangkan semua gambar display (Prosesor lambat jangan dicoba! ( •̀ ω •́ )✧)
 
   // GAMBAR PLAYER
-  display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
+  if (Player.Ord.Status == ACTIVE)  // Jika status pemain "ACTIVE"
+  {
+    display.drawBitmap(Player.Ord.X, Player.Ord.Y, PLAYER_GFX, PLAYER_WIDTH, PLAYER_HEIGHT, WHITE);  // Gambar pesawat Player
+  } else if (Player.Ord.Status == EXPLODING)                                                         // Jika status pemain "EXPLODING"
+  {
+    for (i = 0; i < PLAYER_WIDTH; i += 2)  // Lopping index jika dibawah lebar pemain
+    {
+      display.drawBitmap(Player.Ord.X + i, Player.Ord.Y, EXPLOSION_GFX, random(4) + 2, 8, WHITE);  // Gambar ledakan
+    }
+    Player.ExplosionGfxCounter--;         // Kurangi counter "ExplosionGfxCounter"
+    if (Player.ExplosionGfxCounter == 0)  // Jika counter telah habis
+    {
+      Player.Ord.Status = DESTROYED;  // Ubah status pemain menjadi "DESTROYED"
+      LoseLife();                     // Panggil fungsi "LoseLife()"
+    }
+  }
 
   // GAMBAR INVADER
   for (int across = 0; across < NUM_INVADER_COLUMNS; across++)  // Looping dan cek untuk baris ke kanan
@@ -374,6 +408,22 @@ void Draw() {
     display.drawBitmap(Bullet.X, Bullet.Y, PLAYER_BULLET, BULLET_WIDTH, BULLET_HEIGHT, WHITE);  // Gambar PLAYER_BULLET ke display
   }
 
+  // GAMBAR SERANGAN MUSUH
+  for (i = 0; i < MAX_ATTACK; i++)  // Setiap serangan dibawah maksimal serangan
+  {
+    if (InvaderAttack[i].Status == ACTIVE)  // Jika status serangan "ACTIVE"
+    {
+      display.drawBitmap(InvaderAttack[i].X, InvaderAttack[i].Y, INVADER_BULLET, ATTACK_WIDTH, ATTACK_HEIGHT, WHITE);  // Gambar "INVADER_BULLET"
+    } else                                                                                                             // Jika bukan status "ACTIVE"
+    {
+      if (InvaderAttack[i].Status == EXPLODING)  // Jika status "EXPLODING"
+      {
+        display.drawBitmap(InvaderAttack[i].X, InvaderAttack[i].Y, EXPLOSION_GFX, 8, 8, WHITE);  // Gambar "EXPLOSION_GFX"
+      }
+      InvaderAttack[i].Status = DESTROYED;  // Atur status serangan menjadi "DESTROYED"
+    }
+  }
+
   // GAMBAR MOTHERSHIP
   if (Mothership.Ord.Status == ACTIVE)  // Jika Mothership statusnya "ACTIVE"
   {
@@ -398,10 +448,10 @@ void Draw() {
     display.print(MothershipBonus);             // Tampilkan jumlah bonus point yang didapatkan
     MothershipBonusCounter--;                   // Hitung mundur nilai agar tidak permanen di layar
   } else {
-    display.setCursor(0, 0);
-    display.print(Player.Score);
-    display.setCursor(SCREEN_WIDTH - 7, 0);
-    display.print(Player.Lives);
+    display.setCursor(0, 0);                 // Atur letak penulisan teks dipojok kiri
+    display.print(Player.Score);             // Tulis skor pemain
+    display.setCursor(SCREEN_WIDTH - 7, 0);  // Atur letak penulisan teks dipojok kanan
+    display.print(Player.Lives);             // Tulis nyawa pemain
   }
 
   display.display();  // Memunculkan semua gambar display
@@ -411,8 +461,11 @@ void Draw() {
 void InitPlayer() {
   Player.Ord.X = PLAYER_X_START;  // Atur lokasi awal X player
   Player.Ord.Y = PLAYER_Y_START;  // Atur lokasi awal Y player
-  Bullet.Status = DESTROYED;      // Atur agar status "Bullet" menjadi "DESTROYED"
+  Player.Ord.Status = ACTIVE;     // Atur status pemain jadi aktif
+  Player.Lives = PLAYER_LIVES;    // Atur nyawa pemain
+  Player.Level = 0;               // Atur level yang diraih pemain jadi 0
   Player.Score = 0;               // Atur skor pemain menjadi 0
+  Bullet.Status = DESTROYED;      // Atur agar status "Bullet" menjadi "DESTROYED"
 }
 
 // Fungsi untuk mengkontrol pemain
@@ -427,9 +480,9 @@ void PlayerControlUpdate() {
   }
   if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
   {
-    Bullet.X = Player.Ord.X + (PLAYER_WIDTH / 2) - 4;  // Atur posisi X peluru sesuai lokasi pemain
-    Bullet.Y = PLAYER_Y_START;                         // Atur posisi Y peluru sesuai lokasi Y awal pemain
-    Bullet.Status = ACTIVE;                            // Atur kondisi peluru menjadi aktif
+    Bullet.X = Player.Ord.X + (PLAYER_WIDTH / 2);  // Atur posisi X peluru sesuai lokasi pemain
+    Bullet.Y = PLAYER_Y_START;                     // Atur posisi Y peluru sesuai lokasi Y awal pemain
+    Bullet.Status = ACTIVE;                        // Atur kondisi peluru menjadi aktif
   }
 }
 
@@ -500,6 +553,80 @@ void InvaderControlUpdate() {
     }
     InvadersMoveCounter = INVADERS_SPEED;  // Reset InvadersMoveCounter dengan INVADERS_SPEED (12)
     InvaderFrame = !InvaderFrame;          // Tukar frame dengan frame lain
+
+    if (random(CHANCE_ATTACK) == 1)  // Cek kemungkinan musuh menyerang
+    {
+      InvaderAttacking();  // Jalankan fungsi untuk membuat Invader menyerang
+    }
+    AttackMovement();  // Jalankan fungsi untuk membuat serangan Invader berjalan
+  }
+}
+
+// Fungsi untuk serangan Invader
+void InvaderAttacking() {
+  bool FreeSlot = false;                            // Buat variable "FreeSlot" apabila ada slot serangan kosong
+  unsigned char ActiveColumn[NUM_INVADER_COLUMNS];  // Kolom yang aktif
+  unsigned char AttackIdx = 0;                      // Index serangan Invader
+
+  while ((FreeSlot == false) && (AttackIdx < MAX_ATTACK))  // Jika slot penuh dan serangan yang ada lebih kecil dari maksimal serangan
+  {
+    if (InvaderAttack[AttackIdx].Status == DESTROYED)  // Jika status serangan yang ditembak Invader "DESTROYED"
+    {
+      FreeSlot = true;  // Ada slot kosong
+    } else              // Jika serangan musuh bukan "DESTOYED"
+    {
+      AttackIdx++;  // Tambahkan jumlah serangan musuh
+    }
+  }
+
+  if (FreeSlot)  // Jika ada slot kosong
+  {
+    unsigned char Columns = 0;        // Buat variable kolom
+    unsigned ActiveColumnsCount = 0;  // Buat variable kolom yang aktif
+    signed char Row;                  // Variable baris kanan
+    unsigned char ChosenColumn;       // Variable kolom yang dipilih
+
+    while (Columns < NUM_INVADER_COLUMNS)  // Jika kolom lebih kecil dari "NUM_INVADER_COLUMNS"
+    {
+      Row = 2;          // Atur variable "Row" atau baris menjadi 2
+      while (Row >= 0)  // Jika variable "Row" lebih besar atau sama dari 0
+      {
+        if (Invader[Columns][Row].Ord.Status == ACTIVE)  // Jika Invader yang ingin nembak statusnya "ACTIVE"
+        {
+          ActiveColumn[ActiveColumnsCount] = Columns;  // Buat variable "ActiveColumn[ActiveColumnsCount]" sesuai "Columns"
+          ActiveColumnsCount++;                        // Nambahkan satu pada variable "ActiveColumnsCount"
+          break;                                       // Keluar dari "while" loop
+        }
+        Row--;  // Kurangi "Row"
+      }
+      Columns++;  // Tambahi "Columns"
+    }
+    ChosenColumn = random(ActiveColumnsCount);  // Kolom yang dipilih adalah randomisasi dari kolom yang aktif
+    Row = 2;                                    // Atur "Row" menjadi 2
+
+    while (Row >= 0)  // Loop apabila "Row" lebih besar atau sama dengan 0
+    {
+      if (Invader[ActiveColumn[ChosenColumn]][Row].Ord.Status == ACTIVE)  // Jika Invader dari kolom yang hidup statusnya "ACTIVE"
+      {
+        InvaderAttack[AttackIdx].Status = ACTIVE;                                                              // Atur serangan musuh menjadi "ACTIVE"
+        InvaderAttack[AttackIdx].X = Invader[ActiveColumn[ChosenColumn]][Row].Ord.X + int(INVADER_WIDTH / 2);  // Atur serangan pada lokasi Invader
+        InvaderAttack[AttackIdx].X = (InvaderAttack[AttackIdx].X - 2) + random(0, 4);                          // Menambahkan randomisasi dari lokasi X Invader
+        InvaderAttack[AttackIdx].Y = Invader[ActiveColumn[ChosenColumn]][Row].Ord.Y + 4;                       // Majukan serangan musuh kebawah
+        break;                                                                                                 // Keluar dari "while" loop
+      }
+      Row--;  // Kurangi variable "Row"
+    }
+  }
+}
+
+// Fungsi untuk memajukan serangan Invader
+void AttackMovement() {
+  for (int i = 0; i < MAX_ATTACK; i++)  // Buat perulangan tiap maksimal serangan yang ada
+  {
+    if (InvaderAttack[i].Status == ACTIVE)  // Cek jika status serangan "ACTIVE"
+    {
+      InvaderAttack[i].Y += 2;  // Jalankan serangan kebawah
+    }
   }
 }
 
@@ -543,6 +670,7 @@ void MothershipControlUpdate() {
 void CheckCollisionsUpdate() {
   BulletAndInvaderCollisions();  // Jalankan fungsi BulletAndInvaderCollisions untuk cek tabarakan
   MothershipCollision();         // Jalankan fungsi MothershipCollision untuk cek tabarakan
+  InvaderAttackCollisions();     // Jalankan fungsi InvaderAttackCollisions untuk cek tabrakan
 }
 
 // Fungsi untuk mengecek tabarakan antara Bullet dan Invader
@@ -557,9 +685,45 @@ void BulletAndInvaderCollisions() {
         {
           if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Cek jika funsi Collision() memberikan statement true
           {
-            Invader[across][down].Ord.Status = EXPLODING;  // Ubah status Invader menjadi "EXPLODING"
-            Bullet.Status = DESTROYED;                     // Ubah status peluru menjadi "DESTROYED"
-            Player.Score += InvaderScore(down);            // Menambah nilai skor pemain berdasarkan baris bawah mana yang ditembak
+            Invader[across][down].Ord.Status = EXPLODING;                                              // Ubah status Invader menjadi "EXPLODING"
+            Bullet.Status = DESTROYED;                                                                 // Ubah status peluru menjadi "DESTROYED"
+            Player.Score += InvaderScore(down);                                                        // Menambah nilai skor pemain berdasarkan baris bawah mana yang ditembak
+            Player.KillCount++;                                                                        // Tambahkan jumlah Invader yang dibunuh
+            Player.InvaderSpeed = ((1 - (Player.KillCount / (float)TOTAL_INVADER)) * INVADERS_SPEED);  // Atur kecepatan Invader berdasarkan kalkulasi disamping
+            if (Player.KillCount == TOTAL_INVADER - 2)                                                 // Jika pemain membunuh musuh dan sisa 2
+            {
+              if (InvaderXMoveAmount > 0)  // Jika jalan ke kanan
+              {
+                InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT * 2;  // Percepat dengan dikali 2
+              } else                                             // Jika jalan ke kiri
+              {
+                InvaderXMoveAmount = -(INVADER_X_MOVE_AMOUNT * 2);  // Percepat dengan dikali 2 dan di invert nilainya
+              }
+            }
+            if (Player.KillCount == TOTAL_INVADER - 1)  // Jika pemain membunuh musuh dan sisa 1
+            {
+              if (InvaderXMoveAmount > 0)  // Jika jalan ke kanan
+              {
+                InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT * 4;  // Percepat dengan dikali 4
+              } else                                             // Jika jalan ke kiri
+              {
+                InvaderXMoveAmount = -(INVADER_X_MOVE_AMOUNT * 4);  // Percepat dengan dikali 2 dan di invert nilainya
+              }
+            }
+            if (Player.KillCount == TOTAL_INVADER)  // Jika semua musuh dibunuh
+            {
+              NextLevel(&Player);  // Lanjut ke level berikutnya
+            }
+          }
+        }
+        if (Invader[across][down].Ord.Status == ACTIVE)  // Cek jika status Invader aktif
+        {
+          if (Collision(Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT, Invader[across][down].Ord, INVADER_WIDTH, INVADER_HEIGHT))  // Terjadi bentrokan antara pemain dan Invader
+          {
+            PlayerHit();                                               // Pemain terkena serangan Invader
+          } else if (Invader[across][down].Ord.Y + 8 > SCREEN_HEIGHT)  // Jika Invader melewati batas layar dibawah
+          {
+            PlayerHit();  // Pemain terkena serangan
           }
         }
       }
@@ -567,7 +731,29 @@ void BulletAndInvaderCollisions() {
   }
 }
 
-// // Fungsi untuk mengecek tabarakan antara Bullet dan Mothership
+//Fungsi untuk mengecek tabrakan kepada serangan Invader
+void InvaderAttackCollisions() {
+  for (int i = 0; i < MAX_ATTACK; i++)  // Setiap index lebih kecil dari maksimal serangan
+  {
+    if (InvaderAttack[i].Status == ACTIVE)  // Cek apabila serangan aktif
+    {
+      if (InvaderAttack[i].Y > 64)  // Cek apabila serangan keluar dari layar bawah
+      {
+        InvaderAttack[i].Status = DESTROYED;                                                                     // Ubah status menjadi "DESTROYED"
+      } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Bullet, BULLET_WIDTH, BULLET_HEIGHT))  // Cek jika serangan bentrok dengan peluru pemain
+      {
+        InvaderAttack[i].Status = EXPLODING;                                                                         // Ledakan serangan musuh
+        Bullet.Status = DESTROYED;                                                                                   // Hancurkan peluru pemain
+      } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT))  // Cek jika serangan bentrok dengan pemain
+      {
+        PlayerHit();                          // Jalankan fungsi saat pemain tertembak
+        InvaderAttack[i].Status = DESTROYED;  // Hancurkan serangan musuh
+      }
+    }
+  }
+}
+
+// Fungsi untuk mengecek tabarakan antara Bullet dan Mothership
 void MothershipCollision() {
   if ((Bullet.Status == ACTIVE) && (Mothership.Ord.Status == ACTIVE))  // Jika status Bullet dan Mothership "ACTIVE"
   {
@@ -606,10 +792,134 @@ void MothershipCollision() {
   }
 }
 
+// Fungsi jika pemain tertembak
+void PlayerHit() {
+  Player.Ord.Status = EXPLODING;
+  Player.ExplosionGfxCounter = EXPLOSION_GFX_TIME;
+  Bullet.Status = DESTROYED;
+}
+
+// Fungsi untuk menghilangkan nyawa pemain
+void LoseLife() {
+  Player.Lives--;  // Kurangi nyawa pemain
+
+  if (Player.Lives > 0)  // Jika nyawa pemain masih ada
+  {
+    DisplayPlayerStatus(&Player);  // Jalankan fungsi "DisplayPlayerStatus" dengan argumen "&Player"
+
+    for (int i = 0; i < MAX_ATTACK; i++)  // Looping index jika dibawah maksimal serangan musuh
+    {
+      InvaderAttack[i].Status = DESTROYED;  // Ubah status serangan musuh menjadi "DESTROYED"
+      InvaderAttack[i].Y = 0;               // Atur ulang posisi serangan Y 0
+    }
+    Player.Ord.Status = ACTIVE;  // Ubah kembali status pemain menjadi "ACTIVE"
+    Player.Ord.X = 0;            // Atur ulang posisi pemain X ke 0
+  } else                         // Jika nyawa sudah habis
+  {
+    GameOver();  // Jalankan fungsi "GameOver()"
+  }
+}
+
+// Fungsi layar main menu
+void MenuScreen() {
+  display.clearDisplay();                 // Membersihkan semua tampilan display
+  CentreText("Mulai", 0);                 // Menulis teks ditengah, dengan argumen koordinat Y
+  CentreText("Loli Invaders", 12);        // Menulis teks ditengah, dengan argumen koordinat Y
+  CentreText("Tekan tombol tengah", 24);  // Menulis teks ditengah, dengan argumen koordinat Y
+  CentreText("High Score     ", 36);      // Menulis teks ditengah, dengan argumen koordinat Y
+  display.setCursor(88, 36);              // Atur letak teks untuk ditulis
+  display.print(HighScore);               // Tulis skor tertinggi
+  display.display();                      // Tampilkan dalam layar
+
+  if (digitalRead(SHOOT_BUTTON) == false)  // Jika tombol tembak ditekan
+  {
+    GameInPlay = true;  // status game berlangsung aktif
+    NewGame();          // Buat game ronde baru
+  }
+
+  if ((digitalRead(LEFT_BUTTON) == false) && (digitalRead(RIGHT_BUTTON) == false))  // Jika tombol kiri dan kanan ditekan bersamaan
+  {
+    //TOLONG DITAMBAHKAN FITUR DEBOUNCE ATAU WAKTU LAMA PENEKANAN AGAR TIDAK TERJADI KETIDAK SENGAJAAN RESET SKOR
+    HighScore = 0;                               // Reset skor tertinggi menjadi 0
+    preferences.begin("storage", false);         // Buat penyimpanan atau buka bernama "storage" dengan mode Read & Write
+    preferences.putInt("HighScore", HighScore);  // Ganti data "HighScore" jadi nilai 0
+    preferences.end();                           // Tutup penyimpanan saat tidak diperlukan
+  }
+}
+
+// Fungsi layar game over
+void GameOver() {
+  GameInPlay = false;              // Atur kalo pemain sedang tidak bermain
+  display.clearDisplay();          // Bersihkan gambar layar
+  CentreText("Pemain 1", 0);       // Tulis teks berdasar argumen, serta lokasi Y
+  CentreText("Skill Issues", 12);  // Tulis teks berdasar argumen, serta lokasi Y
+  CentreText("Skor", 24);          // Tulis teks berdasar argumen, serta lokasi Y
+  display.print(Player.Score);     // Tampilkan skor pemain
+  if (Player.Score > HighScore)    // Jika skor pemain lebih tinggi dari skor tertinggi
+  {
+    CentreText("SKOR BARU!!!", 36);              // Tulis teks berdasar argumen, serta lokasi Y
+    CentreText("**SELAMAT**", 48);               // Tulis teks berdasar argumen, serta lokasi Y
+    HighScore = Player.Score;                    // Atur skor tertinggi menjadi skor tertinggi yang pemain raih
+    preferences.begin("storage", false);         // Buat penyimpanan atau buka bernama "storage" dengan mode Read & Write
+    preferences.putInt("HighScore", HighScore);  // Baca data "HighScore"
+    preferences.end();                           // Tutup penyimpanan saat tidak diperlukan
+  }
+  display.display();  // Tampilkan semua teks diatas
+  delay(2500);        // Kasih jeda waktu
+}
+
+// Fungsi untuk menampilkan status pemain
+void DisplayPlayerStatus(PlayerStruct *PLAYER) {
+  display.clearDisplay();         // Bersihkan semua tampilan dalam layar
+  CentreText("Pemain 1", 0);      // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  CentreText("Skor ", 12);        // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  display.print(Player.Score);    // Tampilkan skor pemain
+  CentreText("Nyawa ", 24);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  display.print(Player.Lives);    // Tampilkan nyawa pemain
+  CentreText("Level ", 36);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  display.print(Player.Level);    // Tampilkan level yang pemain capai
+  display.display();              // Tampilkan semua diatas
+  delay(2000);                    // Kasih jeda waktu untuk kodingan berikutnya
+  Player.Ord.X = PLAYER_X_START;  // Atur lokasi pemain ketempat semula
+}
+
+// Fungsi untuk ke level selanjutnya
+void NextLevel(PlayerStruct *PLAYER) {
+  int YStart;                           // Buat variable untuk menyimpan lokasi awal Y
+  for (int i = 0; i < MAX_ATTACK; i++)  // Jika index lebih kecil dari serangan Invader
+  {
+    InvaderAttack[i].Status = DESTROYED;  // Hancurkan semua serangan musuh
+  }
+  InvaderFrame = false;                                                                    // Atur frame Invader menjadi "false" atau Diam
+  Player.Level++;                                                                          // Naik ke tahap level berikutnya
+  YStart = ((Player.Level - 1) % LEVEL_RESET_TO_START_HEIGHT) * AMOUNT_TO_DROP_PER_LEVEL;  // Atur awal lokasi Y sesuai kalkulasi
+  InitInvaders(YStart);                                                                    //Buat Invader baru berdasarkan variable "YStart"
+  InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT;                                              // Reset variable "InvaderXMoveAmount"
+  Player.InvaderSpeed = INVADERS_SPEED;                                                    // Reset kecepatan InvaderSpeed
+  Player.KillCount = 0;                                                                    // Reset jumlah Invader yang dibunuh
+  Mothership.Ord.X = -MOTHERSHIP_WIDTH;                                                    // Reset lokasi Mothership
+  Mothership.Ord.Status = DESTROYED;                                                       // Atur status Mothership jadi "DESTROYED"
+  Bullet.Status = DESTROYED;                                                               // Atur status peluru pemain menjadi "DESTROYED"
+  randomSeed(100);                                                                         // Buat seed secara acak
+  DisplayPlayerStatus(&Player);                                                            // Jalankan fungsi "DisplayPlayerStatus"
+}
+
+// Fungsi untuk memulai permainan baru
+void NewGame() {
+  InitPlayer();
+  NextLevel(&Player);
+}
+
 // Fungsi untuk mengecek tabarakan dengan argumen yang dibawah
 bool Collision(GameObjectStruct OBJECT1, unsigned char WIDTH1, unsigned char HEIGHT1, GameObjectStruct OBJECT2, unsigned char WIDTH2, unsigned char HEIGHT2) {
   // Mengembalikan nilai "true" jika 2 obek ter-tabarakan
   return ((OBJECT1.X + WIDTH1 > OBJECT2.X) && (OBJECT1.X < OBJECT2.X + WIDTH2) && (OBJECT1.Y + HEIGHT1 > OBJECT2.Y) && (OBJECT1.Y < OBJECT2.Y + WIDTH2));
+}
+
+// Fungsi untuk menengahkan teks
+void CentreText(const char *TEXT, unsigned char Y) {
+  display.setCursor(int((float)(SCREEN_WIDTH) / 2 - ((strlen(TEXT) * 6) / 2)), Y);
+  display.print(TEXT);
 }
 
 // Fungsi untuk skor ketika menembak Invader
