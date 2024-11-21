@@ -271,8 +271,8 @@ static const unsigned char MOTHERSHIP_GFX[] = {
   0x3c
 };
 
-// Graphics Dinding
-static const unsigned char WALL_GFX[] = {
+// Graphics dinding Heart
+static const unsigned char HEART_WALL_GFX[] = {
   0x66,
   0x7e,
   0xff,
@@ -281,6 +281,42 @@ static const unsigned char WALL_GFX[] = {
   0x7e,
   0x3c,
   0x18
+};
+
+// Graphics dinding Spade
+static const unsigned char SPADE_WALL_GFX[] = {
+  0x18,
+  0x3c,
+  0x7e,
+  0xff,
+  0xff,
+  0xdb,
+  0x99,
+  0x3c
+};
+
+// Graphics dinding Diamond
+static const unsigned char DIAMOND_WALL_GFX[] = {
+  0x18,
+  0x3c,
+  0x7e,
+  0xff,
+  0xff,
+  0x7e,
+  0x3c,
+  0x18
+};
+
+// Graphics dinding Club
+static const unsigned char CLUB_WALL_GFX[] = {
+  0x3c,
+  0x3c,
+  0xdb,
+  0xff,
+  0xff,
+  0xdb,
+  0x18,
+  0x3c
 };
 
 // Graphics ledakan
@@ -787,74 +823,69 @@ void InvaderAttackCollisions() {
 }
 
 // Fungsi apabila serangan Invader mengenai dinding
-void AttackAndWallCollisions(GameObjectStruct *INVADER_ATTACK)
-{
-  for (int i = 0; i < WALLS_NUMBER; i++) // Untuk setiap index dibawah nilai dinding
+void AttackAndWallCollisions(GameObjectStruct *INVADER_ATTACK) {
+  for (int i = 0; i < WALLS_NUMBER; i++)  // Untuk setiap index dibawah nilai dinding
   {
-    if(Collision(*INVADER_ATTACK, ATTACK_WIDTH, ATTACK_HEIGHT, Wall[i].Ord, WALL_WIDTH, WALL_HEIGHT)) // Cek bentrokan antara dinding dan serangan Invader
+    if (Collision(*INVADER_ATTACK, ATTACK_WIDTH, ATTACK_HEIGHT, Wall[i].Ord, WALL_WIDTH, WALL_HEIGHT))  // Cek bentrokan antara dinding dan serangan Invader
     {
-      unsigned char X = INVADER_ATTACK->X - Wall[i].Ord.X; // Cek jarak serangan dan dinding
-      X = X >> 1; // Operasi bit-shift kanan (>> 1) berarti nilai X dibagi 2, tanpa desimal (pembagian integer)
-      
-      if(X > 7) // Jika nilai lebih tinggi dari 7
+      unsigned char X = INVADER_ATTACK->X - Wall[i].Ord.X;  // Cek jarak serangan dan dinding
+      X = X >> 1;                                           // Operasi bit-shift kanan (>> 1) berarti nilai X dibagi 2, tanpa desimal (pembagian integer)
+
+      if (X > 7)  // Jika nilai lebih tinggi dari 7
       {
-        X = 0; // Atur nilai X menjadi 0
+        X = 0;  // Atur nilai X menjadi 0
       }
-      signed char InvaderAttackY = (INVADER_ATTACK->Y + ATTACK_HEIGHT) - Wall[i].Ord.Y; // Atur lokasi Y serangan Invader
-      unsigned char WallY = 0; // Atur lokasi Y untuk dinding menjadi 0
+      signed char InvaderAttackY = (INVADER_ATTACK->Y + ATTACK_HEIGHT) - Wall[i].Ord.Y;  // Atur lokasi Y serangan Invader
+      unsigned char WallY = 0;                                                           // Atur lokasi Y untuk dinding menjadi 0
 
-      while((WallY <= InvaderAttackY) && (WallY < WALL_HEIGHT) && (INVADER_ATTACK->Status == ACTIVE)) // Jika Y dinding kurang atau sama, serta Y dinding lebih kecil dari tinggi dinding, dan serangan "ACTIVE"
+      while ((WallY <= InvaderAttackY) && (WallY < WALL_HEIGHT) && (INVADER_ATTACK->Status == ACTIVE))  // Jika Y dinding kurang atau sama, serta Y dinding lebih kecil dari tinggi dinding, dan serangan "ACTIVE"
       {
-        unsigned char Idx = (WallY * WALL_WIDTH_IN_BYTES) + (X >> 2); // Menghitung indeks byte dalam data grafis dinding (Wall[i].Gfx) berdasarkan koordinat Y dan X
-        unsigned char TheByte = Wall[i].Gfx[Idx]; // Mengambil byte dari data grafis dinding pada indeks yang dihitung
-        unsigned char BitIdx = X & 3; // Menghitung indeks bit dalam byte (BitIdx = posisi bit dalam 1 byte, berkisar antara 0-3), X & 3 artinya hanya menggunakan 2 bit terakhir dari X untuk menentukan posisi dalam byte
-        unsigned char Mask = 0b11000000; // Membuat masker awal (0b11000000) untuk menghapus/memodifikasi bit tertentu, Masker ini digunakan untuk memilih pasangan bit dalam byte (karena 1 "blok dinding" direpresentasikan oleh 2 bit)
-        Mask = Mask >> (BitIdx << 1); // Geser masker ke kanan sesuai dengan posisi bit (BitIdx), dimana `BitIdx << 1` menggeser masker sebanyak 2 posisi per blok
-        TheByte = TheByte & Mask; // Mengambil hanya pasangan bit yang relevan dari byte dengan operasi AND
+        unsigned char Idx = (WallY * WALL_WIDTH_IN_BYTES) + (X >> 2);  // Menghitung indeks byte dalam data grafis dinding (Wall[i].Gfx) berdasarkan koordinat Y dan X
+        unsigned char TheByte = Wall[i].Gfx[Idx];                      // Mengambil byte dari data grafis dinding pada indeks yang dihitung
+        unsigned char BitIdx = X & 3;                                  // Menghitung indeks bit dalam byte (BitIdx = posisi bit dalam 1 byte, berkisar antara 0-3), X & 3 artinya hanya menggunakan 2 bit terakhir dari X untuk menentukan posisi dalam byte
+        unsigned char Mask = 0b11000000;                               // Membuat masker awal (0b11000000) untuk menghapus/memodifikasi bit tertentu, Masker ini digunakan untuk memilih pasangan bit dalam byte (karena 1 "blok dinding" direpresentasikan oleh 2 bit)
+        Mask = Mask >> (BitIdx << 1);                                  // Geser masker ke kanan sesuai dengan posisi bit (BitIdx), dimana `BitIdx << 1` menggeser masker sebanyak 2 posisi per blok
+        TheByte = TheByte & Mask;                                      // Mengambil hanya pasangan bit yang relevan dari byte dengan operasi AND
 
-        if(TheByte > 0) // Mengecek apakah pasangan bit yang diambil tidak kosong (ada blok yang terkena)
+        if (TheByte > 0)  // Mengecek apakah pasangan bit yang diambil tidak kosong (ada blok yang terkena)
         {
-          Mask = ~Mask; // Membalikkan masker untuk mempersiapkan penghapusan blok yang terkena
-          Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask; // Menghapus blok yang terkena dari data grafis dinding
+          Mask = ~Mask;                                // Membalikkan masker untuk mempersiapkan penghapusan blok yang terkena
+          Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask;  // Menghapus blok yang terkena dari data grafis dinding
 
-          if (X > 0) // Jika posisi X lebih besar dari 0 (bukan tepi kiri dinding)
+          if (X > 0)  // Jika posisi X lebih besar dari 0 (bukan tepi kiri dinding)
           {
-            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT)) // Memutuskan secara acak apakah akan merusak blok di kiri
+            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT))  // Memutuskan secara acak apakah akan merusak blok di kiri
             {
-              if (X != 4) // Jika X bukan posisi blok ke-4
+              if (X != 4)  // Jika X bukan posisi blok ke-4
               {
-                Mask = (Mask << 1) | 1; // Geser masker ke kiri 1 bit dan tambahkan bit '1' di ujung kanan
-                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask; // Terapkan masker untuk merusak blok di kiri
-              }
-              else // Jika X adalah posisi blok ke-4
+                Mask = (Mask << 1) | 1;                      // Geser masker ke kiri 1 bit dan tambahkan bit '1' di ujung kanan
+                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask;  // Terapkan masker untuk merusak blok di kiri
+              } else                                         // Jika X adalah posisi blok ke-4
               {
-                Wall[i].Gfx[Idx - 1] = Wall[i].Gfx[Idx - 1] & 0b11111110; // Modifikasi byte sebelumnya untuk merusak blok di tepi
+                Wall[i].Gfx[Idx - 1] = Wall[i].Gfx[Idx - 1] & 0b11111110;  // Modifikasi byte sebelumnya untuk merusak blok di tepi
               }
             }
           }
-          if (X < 7) // Jika posisi X lebih kecil dari 7 (bukan tepi kanan dinding)
+          if (X < 7)  // Jika posisi X lebih kecil dari 7 (bukan tepi kanan dinding)
           {
-            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT)) // Memutuskan secara acak apakah akan merusak blok di kanan
+            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT))  // Memutuskan secara acak apakah akan merusak blok di kanan
             {
-              if ( X != 3) // Jika X bukan posisi blok ke-3
+              if (X != 3)  // Jika X bukan posisi blok ke-3
               {
-                Mask = (Mask >> 1) | 128; // Geser masker ke kanan 1 bit dan tambahkan bit '1' di ujung kiri
-                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask; // Terapkan masker untuk merusak blok di kanan
-              }
-              else // Jika X adalah posisi blok ke-3
+                Mask = (Mask >> 1) | 128;                    // Geser masker ke kanan 1 bit dan tambahkan bit '1' di ujung kiri
+                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask;  // Terapkan masker untuk merusak blok di kanan
+              } else                                         // Jika X adalah posisi blok ke-3
               {
-                Wall[i].Gfx[Idx + 1] = Wall[i].Gfx[Idx + 1] & 0b01111111; // Modifikasi byte berikutnya untuk merusak blok di tepi
+                Wall[i].Gfx[Idx + 1] = Wall[i].Gfx[Idx + 1] & 0b01111111;  // Modifikasi byte berikutnya untuk merusak blok di tepi
               }
             }
           }
-          if (random(CHANCE_ATTACK_PENETRATING_DOWN) == false) // Memutuskan secara acak apakah serangan menembus dinding lebih jauh ke bawah
+          if (random(CHANCE_ATTACK_PENETRATING_DOWN) == false)  // Memutuskan secara acak apakah serangan menembus dinding lebih jauh ke bawah
           {
-            INVADER_ATTACK->Status = EXPLODING; // Jika tidak menembus lebih jauh, ubah status serangan menjadi "EXPLODING"
+            INVADER_ATTACK->Status = EXPLODING;  // Jika tidak menembus lebih jauh, ubah status serangan menjadi "EXPLODING"
           }
-        }
-        else
-        {
-          WallY++; // Jika tidak ada blok yang terkena, pindah ke baris berikutnya di dinding (WallY++)
+        } else {
+          WallY++;  // Jika tidak ada blok yang terkena, pindah ke baris berikutnya di dinding (WallY++)
         }
       }
     }
@@ -862,8 +893,7 @@ void AttackAndWallCollisions(GameObjectStruct *INVADER_ATTACK)
 }
 
 // Fungsi mengecek tabrakan peluru ke dinding
-void BulletAndWallCollision()
-{
+void BulletAndWallCollision() {
   // LANJUT DISINI ( •̀ ω •́ )✧
 }
 
@@ -984,16 +1014,16 @@ void GameOver() {
 
 // Fungsi untuk menampilkan status pemain
 void DisplayPlayerStatus(PlayerStruct *PLAYER) {
-  display.clearDisplay();         // Bersihkan semua tampilan dalam layar
-  CentreText("Pemain 1", 0);      // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-  CentreText("Skor ", 12);        // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  display.clearDisplay();          // Bersihkan semua tampilan dalam layar
+  CentreText("Pemain 1", 0);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  CentreText("Skor ", 12);         // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
   display.print(PLAYER->Score);    // Tampilkan skor pemain
-  CentreText("Nyawa ", 24);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  CentreText("Nyawa ", 24);        // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
   display.print(PLAYER->Lives);    // Tampilkan nyawa pemain
-  CentreText("Level ", 36);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+  CentreText("Level ", 36);        // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
   display.print(PLAYER->Level);    // Tampilkan level yang pemain capai
-  display.display();              // Tampilkan semua diatas
-  delay(2000);                    // Kasih jeda waktu untuk kodingan berikutnya
+  display.display();               // Tampilkan semua diatas
+  delay(2000);                     // Kasih jeda waktu untuk kodingan berikutnya
   PLAYER->Ord.X = PLAYER_X_START;  // Atur lokasi pemain ketempat semula
 }
 
@@ -1004,18 +1034,18 @@ void NextLevel(PlayerStruct *PLAYER) {
   {
     InvaderAttack[i].Status = DESTROYED;  // Hancurkan semua serangan musuh
   }
-  InvaderFrame = false;                                                                    // Atur frame Invader menjadi "false" atau Diam
+  InvaderFrame = false;                                                                     // Atur frame Invader menjadi "false" atau Diam
   PLAYER->Level++;                                                                          // Naik ke tahap level berikutnya
   YStart = ((PLAYER->Level - 1) % LEVEL_RESET_TO_START_HEIGHT) * AMOUNT_TO_DROP_PER_LEVEL;  // Atur awal lokasi Y sesuai kalkulasi
-  InitInvaders(YStart);                                                                    //Buat Invader baru berdasarkan variable "YStart"
-  InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT;                                              // Reset variable "InvaderXMoveAmount"
+  InitInvaders(YStart);                                                                     //Buat Invader baru berdasarkan variable "YStart"
+  InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT;                                               // Reset variable "InvaderXMoveAmount"
   PLAYER->InvaderSpeed = INVADERS_SPEED;                                                    // Reset kecepatan InvaderSpeed
   PLAYER->KillCount = 0;                                                                    // Reset jumlah Invader yang dibunuh
-  Mothership.Ord.X = -MOTHERSHIP_WIDTH;                                                    // Reset lokasi Mothership
-  Mothership.Ord.Status = DESTROYED;                                                       // Atur status Mothership jadi "DESTROYED"
-  Bullet.Status = DESTROYED;                                                               // Atur status peluru pemain menjadi "DESTROYED"
-  randomSeed(100);                                                                         // Buat seed secara acak
-  DisplayPlayerStatus(&Player);                                                            // Jalankan fungsi "DisplayPlayerStatus"
+  Mothership.Ord.X = -MOTHERSHIP_WIDTH;                                                     // Reset lokasi Mothership
+  Mothership.Ord.Status = DESTROYED;                                                        // Atur status Mothership jadi "DESTROYED"
+  Bullet.Status = DESTROYED;                                                                // Atur status peluru pemain menjadi "DESTROYED"
+  randomSeed(100);                                                                          // Buat seed secara acak
+  DisplayPlayerStatus(&Player);                                                             // Jalankan fungsi "DisplayPlayerStatus"
 }
 
 // Fungsi untuk memulai permainan baru
