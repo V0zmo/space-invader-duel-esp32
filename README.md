@@ -18,3 +18,4 @@ Sebuah proyek untuk membuat Duel Space Invader dengan ESP32. Koneksi dengan ESP-
 - [DFPlayer Mini Connection and Diagram](https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299#Connection_Diagram)
 - [Tutorial Video DFPlayer with ESP32](https://www.youtube.com/watch?v=9w_AaIwlsE4)
 - [Tutorial Video Playlist Space Invader with Arduino UNO](https://www.youtube.com/watch?v=Dz9BtsmyHgo&list=PLpyo4J4M9YqL8TxN9orfPCZxZ3JDuNlnG&index=1)
+- [ESP32 Save Data Permanently using Preferences Library](https://randomnerdtutorials.com/esp32-save-data-permanently-preferences/)
