@@ -48,7 +48,13 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define BULLET_HEIGHT 7         // Panjang peluru
 #define BULLET_SPEED 4          // Kecepatana peluru (semakin besar semakin cepat)
 
-// BAGIAN TEMBOK
+// BAGIAN DINDING
+#define WALL_WIDTH 8           // Lebar dinding
+#define WALL_HEIGHT 8          // Panjang dinding
+#define WALL_WIDTH_IN_BYTES 2  // Lebar dinding dalam bytes
+#define WALL_Y 46              // Lokasi Y dinding
+#define WALLS_NUMBER 4         // Jumlah dinding
+#define WALL_MARGINS 10        // Margin atau jarak dinding
 
 // BAGIAN MOTHERSHIP
 #define MOTHERSHIP_WIDTH 8                // Panjang Mothership
@@ -58,22 +64,24 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define DISPLAY_MOTHERSHIP_BONUS_TIME 25  // Berapa lama bonus tetap berada di layar untuk menampilkan Mothership
 
 // BAGIAN INVADER
-#define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
-#define NUM_INVADER_ROWS 3               // Jumlah invader lurus ke bawah
-#define SPACE_BETWEEN_INVADER_COLUMNS 5  // Jarak antara invader dari kanan
-#define SPACE_BETWEEN_INVADER_ROWS 16    // Jarak antara invader dari bawah
-#define INVADER_WIDTH 8                  // Ukuran lebar terbesar invader
-#define INVADER_HEIGHT 8                 // Ukuran lebar terbesar invader
-#define X_START_OFFSET 6                 // Offset X lokasi invader
-#define AMOUNT_TO_DROP_PER_LEVEL 4       // Seberapa jauh Invader turun tiap level baru
-#define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
-#define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
-#define LEVEL_RESET_TO_START_HEIGHT 4    // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
-#define INVADER_X_MOVE_AMOUNT 1          // Jumlah pixel tiap mulai ronde baru
-#define CHANCE_ATTACK 20                 // Semakin besar semakin kecil persentase Invader menyerang pemain
-#define ATTACK_WIDTH 4                   // Lebar serangan Invader
-#define ATTACK_HEIGHT 8                  // Tinggi serangan Invader
-#define MAX_ATTACK 3                     // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
+#define NUM_INVADER_COLUMNS 7                    // Jumlah invader lurus ke kanan
+#define NUM_INVADER_ROWS 3                       // Jumlah invader lurus ke bawah
+#define SPACE_BETWEEN_INVADER_COLUMNS 5          // Jarak antara invader dari kanan
+#define SPACE_BETWEEN_INVADER_ROWS 16            // Jarak antara invader dari bawah
+#define INVADER_WIDTH 8                          // Ukuran lebar terbesar invader
+#define INVADER_HEIGHT 8                         // Ukuran lebar terbesar invader
+#define X_START_OFFSET 6                         // Offset X lokasi invader
+#define AMOUNT_TO_DROP_PER_LEVEL 4               // Seberapa jauh Invader turun tiap level baru
+#define INVADERS_DROP 4                          // Seberapa jauh invader jatuh dalam pixel
+#define INVADERS_SPEED 12                        // Kecepatan invader (semakin rendah semakin cepat)
+#define LEVEL_RESET_TO_START_HEIGHT 4            // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
+#define INVADER_X_MOVE_AMOUNT 1                  // Jumlah pixel tiap mulai ronde baru
+#define CHANCE_ATTACK 20                         // Semakin besar semakin kecil persentase Invader menyerang pemain
+#define ATTACK_WIDTH 4                           // Lebar serangan Invader
+#define ATTACK_HEIGHT 8                          // Tinggi serangan Invader
+#define MAX_ATTACK 3                             // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
+#define CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT 3  // Peluang attack musuh mengenai kiri atau kanan, semakin tinggi nilanya semakin tinggi juga peluangnya
+#define CHANCE_ATTACK_PENETRATING_DOWN 3         // Peluang serangan menembus bawah, semakin tinggi nilanya semakin tinggi juga peluangnya
 
 // STRUKTUR GAME
 
@@ -101,13 +109,19 @@ struct InvaderStruct {
   unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
 };
 
+// Struktur untuk dinding
+struct WallStruct {
+  GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
+  unsigned char Gfx[8];  // Graphic pixel dinding (2x2, 4x4, 8x8, ...,)
+};
+
 // GLOBAL VARIABLE
 
 // Global audio
 static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
 static const uint8_t PIN_MP3_RX = 27;  // Menghubungkan ke TX modul
 
-// Global game
+// Global Game
 unsigned int HighScore;   // Skor tertinggi dalam game secara global
 bool GameInPlay = false;  // Apakah game sedang dimainkan
 
@@ -136,9 +150,10 @@ PlayerStruct Player;                                           // Player global 
 InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
 InvaderStruct Mothership;                                      // Buat Mothership
 GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek serangan musuh
+WallStruct Wall[WALLS_NUMBER];                                 // Buat objek dinding dengan jumlah dinding
 
 // Graphics Player
-static const unsigned char PROGMEM PLAYER_GFX[] = {
+static const unsigned char PLAYER_GFX[] = {
   0x18,
   0x18,
   0x18,
@@ -150,7 +165,7 @@ static const unsigned char PROGMEM PLAYER_GFX[] = {
 };
 
 // Graphics Bullet 1
-static const unsigned char PROGMEM PLAYER_BULLET[] = {
+static const unsigned char PLAYER_BULLET[] = {
   0xc0,
   0xc0,
   0xc0,
@@ -161,7 +176,7 @@ static const unsigned char PROGMEM PLAYER_BULLET[] = {
 };
 
 // Graphics Bullet 2
-static const unsigned char PROGMEM INVADER_BULLET[] = {
+static const unsigned char INVADER_BULLET[] = {
   0x90,
   0x60,
   0x00,
@@ -173,7 +188,7 @@ static const unsigned char PROGMEM INVADER_BULLET[] = {
 };
 
 // Graphics Musuh 1 (Diam)
-static const unsigned char PROGMEM INVADER_1_GFX_01[] = {
+static const unsigned char INVADER_1_GFX_01[] = {
   0x24,
   0xff,
   0x5a,
@@ -185,7 +200,7 @@ static const unsigned char PROGMEM INVADER_1_GFX_01[] = {
 };
 
 // Graphics Musuh 1 (Jalan)
-static const unsigned char PROGMEM INVADER_1_GFX_02[] = {
+static const unsigned char INVADER_1_GFX_02[] = {
   0x42,
   0xff,
   0x5a,
@@ -197,7 +212,7 @@ static const unsigned char PROGMEM INVADER_1_GFX_02[] = {
 };
 
 // Graphics Musuh 2 (Diam)
-static const unsigned char PROGMEM INVADER_2_GFX_01[] = {
+static const unsigned char INVADER_2_GFX_01[] = {
   0x3c,
   0x7e,
   0xe7,
@@ -209,7 +224,7 @@ static const unsigned char PROGMEM INVADER_2_GFX_01[] = {
 };
 
 // Graphics Musuh 2 (Jalan)
-static const unsigned char PROGMEM INVADER_2_GFX_02[] = {
+static const unsigned char INVADER_2_GFX_02[] = {
   0xbd,
   0xff,
   0xe7,
@@ -221,7 +236,7 @@ static const unsigned char PROGMEM INVADER_2_GFX_02[] = {
 };
 
 // Graphics Musuh 3 (Diam)
-static const unsigned char PROGMEM INVADER_3_GFX_01[] = {
+static const unsigned char INVADER_3_GFX_01[] = {
   0xc3,
   0x7e,
   0xff,
@@ -233,7 +248,7 @@ static const unsigned char PROGMEM INVADER_3_GFX_01[] = {
 };
 
 // Graphics Musuh 3 (Jalan)
-static const unsigned char PROGMEM INVADER_3_GFX_02[] = {
+static const unsigned char INVADER_3_GFX_02[] = {
   0x66,
   0x7e,
   0xff,
@@ -245,7 +260,7 @@ static const unsigned char PROGMEM INVADER_3_GFX_02[] = {
 };
 
 // Graphics Mothership
-static const unsigned char PROGMEM MOTHERSHIP_GFX[] = {
+static const unsigned char MOTHERSHIP_GFX[] = {
   0x18,
   0x3c,
   0x3c,
@@ -256,8 +271,20 @@ static const unsigned char PROGMEM MOTHERSHIP_GFX[] = {
   0x3c
 };
 
+// Graphics Dinding
+static const unsigned char WALL_GFX[] = {
+  0x66,
+  0x7e,
+  0xff,
+  0xff,
+  0xff,
+  0x7e,
+  0x3c,
+  0x18
+};
+
 // Graphics ledakan
-static const unsigned char PROGMEM EXPLOSION_GFX[] = {
+static const unsigned char EXPLOSION_GFX[] = {
   0x85,
   0x6a,
   0x9a,
@@ -742,15 +769,102 @@ void InvaderAttackCollisions() {
         InvaderAttack[i].Status = DESTROYED;                                                                     // Ubah status menjadi "DESTROYED"
       } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Bullet, BULLET_WIDTH, BULLET_HEIGHT))  // Cek jika serangan bentrok dengan peluru pemain
       {
-        InvaderAttack[i].Status = EXPLODING;                                                                         // Ledakan serangan musuh
-        Bullet.Status = DESTROYED;                                                                                   // Hancurkan peluru pemain
-      } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT))  // Cek jika serangan bentrok dengan pemain
+        InvaderAttack[i].Status = EXPLODING;  // Ledakan serangan musuh
+        Bullet.Status = DESTROYED;            // Hancurkan peluru pemain
+      } else                                  // Jika bukan kedua tersebut
       {
-        PlayerHit();                          // Jalankan fungsi saat pemain tertembak
-        InvaderAttack[i].Status = DESTROYED;  // Hancurkan serangan musuh
+        if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT))  // Cek jika serangan bentrok dengan pemain
+        {
+          PlayerHit();                          // Jalankan fungsi saat pemain tertembak
+          InvaderAttack[i].Status = DESTROYED;  // Hancurkan serangan musuh
+        } else                                  // Jika serangan Invader tidak mengenai pemain
+        {
+          AttackAndWallCollisions(&InvaderAttack[i]);  // Jalankan fungsi "AttackAndWallCollisions" dengan argumen serangan Invader
+        }
       }
     }
   }
+}
+
+// Fungsi apabila serangan Invader mengenai dinding
+void AttackAndWallCollisions(GameObjectStruct *INVADER_ATTACK)
+{
+  for (int i = 0; i < WALLS_NUMBER; i++) // Untuk setiap index dibawah nilai dinding
+  {
+    if(Collision(*INVADER_ATTACK, ATTACK_WIDTH, ATTACK_HEIGHT, Wall[i].Ord, WALL_WIDTH, WALL_HEIGHT)) // Cek bentrokan antara dinding dan serangan Invader
+    {
+      unsigned char X = INVADER_ATTACK->X - Wall[i].Ord.X; // Cek jarak serangan dan dinding
+      X = X >> 1; // Operasi bit-shift kanan (>> 1) berarti nilai X dibagi 2, tanpa desimal (pembagian integer)
+      
+      if(X > 7) // Jika nilai lebih tinggi dari 7
+      {
+        X = 0; // Atur nilai X menjadi 0
+      }
+      signed char InvaderAttackY = (INVADER_ATTACK->Y + ATTACK_HEIGHT) - Wall[i].Ord.Y; // Atur lokasi Y serangan Invader
+      unsigned char WallY = 0; // Atur lokasi Y untuk dinding menjadi 0
+
+      while((WallY <= InvaderAttackY) && (WallY < WALL_HEIGHT) && (INVADER_ATTACK->Status == ACTIVE)) // Jika Y dinding kurang atau sama, serta Y dinding lebih kecil dari tinggi dinding, dan serangan "ACTIVE"
+      {
+        unsigned char Idx = (WallY * WALL_WIDTH_IN_BYTES) + (X >> 2); // Menghitung indeks byte dalam data grafis dinding (Wall[i].Gfx) berdasarkan koordinat Y dan X
+        unsigned char TheByte = Wall[i].Gfx[Idx]; // Mengambil byte dari data grafis dinding pada indeks yang dihitung
+        unsigned char BitIdx = X & 3; // Menghitung indeks bit dalam byte (BitIdx = posisi bit dalam 1 byte, berkisar antara 0-3), X & 3 artinya hanya menggunakan 2 bit terakhir dari X untuk menentukan posisi dalam byte
+        unsigned char Mask = 0b11000000; // Membuat masker awal (0b11000000) untuk menghapus/memodifikasi bit tertentu, Masker ini digunakan untuk memilih pasangan bit dalam byte (karena 1 "blok dinding" direpresentasikan oleh 2 bit)
+        Mask = Mask >> (BitIdx << 1); // Geser masker ke kanan sesuai dengan posisi bit (BitIdx), dimana `BitIdx << 1` menggeser masker sebanyak 2 posisi per blok
+        TheByte = TheByte & Mask; // Mengambil hanya pasangan bit yang relevan dari byte dengan operasi AND
+
+        if(TheByte > 0) // Mengecek apakah pasangan bit yang diambil tidak kosong (ada blok yang terkena)
+        {
+          Mask = ~Mask; // Membalikkan masker untuk mempersiapkan penghapusan blok yang terkena
+          Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask; // Menghapus blok yang terkena dari data grafis dinding
+
+          if (X > 0) // Jika posisi X lebih besar dari 0 (bukan tepi kiri dinding)
+          {
+            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT)) // Memutuskan secara acak apakah akan merusak blok di kiri
+            {
+              if (X != 4) // Jika X bukan posisi blok ke-4
+              {
+                Mask = (Mask << 1) | 1; // Geser masker ke kiri 1 bit dan tambahkan bit '1' di ujung kanan
+                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask; // Terapkan masker untuk merusak blok di kiri
+              }
+              else // Jika X adalah posisi blok ke-4
+              {
+                Wall[i].Gfx[Idx - 1] = Wall[i].Gfx[Idx - 1] & 0b11111110; // Modifikasi byte sebelumnya untuk merusak blok di tepi
+              }
+            }
+          }
+          if (X < 7) // Jika posisi X lebih kecil dari 7 (bukan tepi kanan dinding)
+          {
+            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT)) // Memutuskan secara acak apakah akan merusak blok di kanan
+            {
+              if ( X != 3) // Jika X bukan posisi blok ke-3
+              {
+                Mask = (Mask >> 1) | 128; // Geser masker ke kanan 1 bit dan tambahkan bit '1' di ujung kiri
+                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask; // Terapkan masker untuk merusak blok di kanan
+              }
+              else // Jika X adalah posisi blok ke-3
+              {
+                Wall[i].Gfx[Idx + 1] = Wall[i].Gfx[Idx + 1] & 0b01111111; // Modifikasi byte berikutnya untuk merusak blok di tepi
+              }
+            }
+          }
+          if (random(CHANCE_ATTACK_PENETRATING_DOWN) == false) // Memutuskan secara acak apakah serangan menembus dinding lebih jauh ke bawah
+          {
+            INVADER_ATTACK->Status = EXPLODING; // Jika tidak menembus lebih jauh, ubah status serangan menjadi "EXPLODING"
+          }
+        }
+        else
+        {
+          WallY++; // Jika tidak ada blok yang terkena, pindah ke baris berikutnya di dinding (WallY++)
+        }
+      }
+    }
+  }
+}
+
+// Fungsi mengecek tabrakan peluru ke dinding
+void BulletAndWallCollision()
+{
+  // LANJUT DISINI ( •̀ ω •́ )✧
 }
 
 // Fungsi untuk mengecek tabarakan antara Bullet dan Mothership
@@ -873,14 +987,14 @@ void DisplayPlayerStatus(PlayerStruct *PLAYER) {
   display.clearDisplay();         // Bersihkan semua tampilan dalam layar
   CentreText("Pemain 1", 0);      // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
   CentreText("Skor ", 12);        // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-  display.print(Player.Score);    // Tampilkan skor pemain
+  display.print(PLAYER->Score);    // Tampilkan skor pemain
   CentreText("Nyawa ", 24);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-  display.print(Player.Lives);    // Tampilkan nyawa pemain
+  display.print(PLAYER->Lives);    // Tampilkan nyawa pemain
   CentreText("Level ", 36);       // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-  display.print(Player.Level);    // Tampilkan level yang pemain capai
+  display.print(PLAYER->Level);    // Tampilkan level yang pemain capai
   display.display();              // Tampilkan semua diatas
   delay(2000);                    // Kasih jeda waktu untuk kodingan berikutnya
-  Player.Ord.X = PLAYER_X_START;  // Atur lokasi pemain ketempat semula
+  PLAYER->Ord.X = PLAYER_X_START;  // Atur lokasi pemain ketempat semula
 }
 
 // Fungsi untuk ke level selanjutnya
@@ -891,12 +1005,12 @@ void NextLevel(PlayerStruct *PLAYER) {
     InvaderAttack[i].Status = DESTROYED;  // Hancurkan semua serangan musuh
   }
   InvaderFrame = false;                                                                    // Atur frame Invader menjadi "false" atau Diam
-  Player.Level++;                                                                          // Naik ke tahap level berikutnya
-  YStart = ((Player.Level - 1) % LEVEL_RESET_TO_START_HEIGHT) * AMOUNT_TO_DROP_PER_LEVEL;  // Atur awal lokasi Y sesuai kalkulasi
+  PLAYER->Level++;                                                                          // Naik ke tahap level berikutnya
+  YStart = ((PLAYER->Level - 1) % LEVEL_RESET_TO_START_HEIGHT) * AMOUNT_TO_DROP_PER_LEVEL;  // Atur awal lokasi Y sesuai kalkulasi
   InitInvaders(YStart);                                                                    //Buat Invader baru berdasarkan variable "YStart"
   InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT;                                              // Reset variable "InvaderXMoveAmount"
-  Player.InvaderSpeed = INVADERS_SPEED;                                                    // Reset kecepatan InvaderSpeed
-  Player.KillCount = 0;                                                                    // Reset jumlah Invader yang dibunuh
+  PLAYER->InvaderSpeed = INVADERS_SPEED;                                                    // Reset kecepatan InvaderSpeed
+  PLAYER->KillCount = 0;                                                                    // Reset jumlah Invader yang dibunuh
   Mothership.Ord.X = -MOTHERSHIP_WIDTH;                                                    // Reset lokasi Mothership
   Mothership.Ord.Status = DESTROYED;                                                       // Atur status Mothership jadi "DESTROYED"
   Bullet.Status = DESTROYED;                                                               // Atur status peluru pemain menjadi "DESTROYED"
