@@ -26,6 +26,9 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define SCREEN_WIDTH 128   // Lebar tampilan OLED, dalam piksel
 #define SCREEN_HEIGHT 64   // Tinggi tampilan OLED, dalam piksel
 
+// BAGIAN AUDIO
+#define AUDIO_VOLUME 25  // Besar suara audio
+
 // BAGIAN TOMBOL
 #define SHOOT_BUTTON 12  // Pin tombol 1
 #define LEFT_BUTTON 13   // Pin tombol 2
@@ -47,14 +50,6 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define BULLET_WIDTH 2          // Lebar peluru
 #define BULLET_HEIGHT 7         // Panjang peluru
 #define BULLET_SPEED 4          // Kecepatana peluru (semakin besar semakin cepat)
-
-// BAGIAN DINDING
-#define WALL_WIDTH 8           // Lebar dinding
-#define WALL_HEIGHT 8          // Panjang dinding
-#define WALL_WIDTH_IN_BYTES 2  // Lebar dinding dalam bytes
-#define WALL_Y 46              // Lokasi Y dinding
-#define WALLS_NUMBER 4         // Jumlah dinding
-#define WALL_MARGINS 10        // Margin atau jarak dinding
 
 // BAGIAN MOTHERSHIP
 #define MOTHERSHIP_WIDTH 8                // Panjang Mothership
@@ -109,12 +104,6 @@ struct InvaderStruct {
   unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
 };
 
-// Struktur untuk dinding
-struct WallStruct {
-  GameObjectStruct Ord;  // Inisiasi class GameObjectStruct
-  unsigned char Gfx[8];  // Graphic pixel dinding (2x2, 4x4, 8x8, ...,)
-};
-
 // GLOBAL VARIABLE
 
 // Global audio
@@ -150,7 +139,6 @@ PlayerStruct Player;                                           // Player global 
 InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
 InvaderStruct Mothership;                                      // Buat Mothership
 GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek serangan musuh
-WallStruct Wall[WALLS_NUMBER];                                 // Buat objek dinding dengan jumlah dinding
 
 // Graphics Player
 static const unsigned char PLAYER_GFX[] = {
@@ -271,54 +259,6 @@ static const unsigned char MOTHERSHIP_GFX[] = {
   0x3c
 };
 
-// Graphics dinding Heart
-static const unsigned char HEART_WALL_GFX[] = {
-  0x66,
-  0x7e,
-  0xff,
-  0xff,
-  0xff,
-  0x7e,
-  0x3c,
-  0x18
-};
-
-// Graphics dinding Spade
-static const unsigned char SPADE_WALL_GFX[] = {
-  0x18,
-  0x3c,
-  0x7e,
-  0xff,
-  0xff,
-  0xdb,
-  0x99,
-  0x3c
-};
-
-// Graphics dinding Diamond
-static const unsigned char DIAMOND_WALL_GFX[] = {
-  0x18,
-  0x3c,
-  0x7e,
-  0xff,
-  0xff,
-  0x7e,
-  0x3c,
-  0x18
-};
-
-// Graphics dinding Club
-static const unsigned char CLUB_WALL_GFX[] = {
-  0x3c,
-  0x3c,
-  0xdb,
-  0xff,
-  0xff,
-  0xdb,
-  0x18,
-  0x3c
-};
-
 // Graphics ledakan
 static const unsigned char EXPLOSION_GFX[] = {
   0x85,
@@ -363,6 +303,8 @@ void setup() {
 
   display.setTextSize(1);       // Atur ukuran teks
   display.setTextColor(WHITE);  // Atur warna teks
+
+  mpPlayer.volume(AUDIO_VOLUME);  // Atur besar suara audio
 
   InitInvaders(0);  // Manggil fungsi penciptaan Invader
   InitPlayer();     // Manggil fungsi penciptaan Player
@@ -805,97 +747,17 @@ void InvaderAttackCollisions() {
         InvaderAttack[i].Status = DESTROYED;                                                                     // Ubah status menjadi "DESTROYED"
       } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Bullet, BULLET_WIDTH, BULLET_HEIGHT))  // Cek jika serangan bentrok dengan peluru pemain
       {
-        InvaderAttack[i].Status = EXPLODING;  // Ledakan serangan musuh
-        Bullet.Status = DESTROYED;            // Hancurkan peluru pemain
-      } else                                  // Jika bukan kedua tersebut
+        InvaderAttack[i].Status = EXPLODING;                                                                         // Ledakan serangan musuh
+        Bullet.Status = DESTROYED;                                                                                   // Hancurkan peluru pemain
+      } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT))  // Cek jika serangan bentrok dengan pemain
       {
-        if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT))  // Cek jika serangan bentrok dengan pemain
-        {
-          PlayerHit();                          // Jalankan fungsi saat pemain tertembak
-          InvaderAttack[i].Status = DESTROYED;  // Hancurkan serangan musuh
-        } else                                  // Jika serangan Invader tidak mengenai pemain
-        {
-          AttackAndWallCollisions(&InvaderAttack[i]);  // Jalankan fungsi "AttackAndWallCollisions" dengan argumen serangan Invader
-        }
+        PlayerHit();                          // Jalankan fungsi saat pemain tertembak
+        InvaderAttack[i].Status = DESTROYED;  // Hancurkan serangan musuh
       }
     }
   }
 }
 
-// Fungsi apabila serangan Invader mengenai dinding
-void AttackAndWallCollisions(GameObjectStruct *INVADER_ATTACK) {
-  for (int i = 0; i < WALLS_NUMBER; i++)  // Untuk setiap index dibawah nilai dinding
-  {
-    if (Collision(*INVADER_ATTACK, ATTACK_WIDTH, ATTACK_HEIGHT, Wall[i].Ord, WALL_WIDTH, WALL_HEIGHT))  // Cek bentrokan antara dinding dan serangan Invader
-    {
-      unsigned char X = INVADER_ATTACK->X - Wall[i].Ord.X;  // Cek jarak serangan dan dinding
-      X = X >> 1;                                           // Operasi bit-shift kanan (>> 1) berarti nilai X dibagi 2, tanpa desimal (pembagian integer)
-
-      if (X > 7)  // Jika nilai lebih tinggi dari 7
-      {
-        X = 0;  // Atur nilai X menjadi 0
-      }
-      signed char InvaderAttackY = (INVADER_ATTACK->Y + ATTACK_HEIGHT) - Wall[i].Ord.Y;  // Atur lokasi Y serangan Invader
-      unsigned char WallY = 0;                                                           // Atur lokasi Y untuk dinding menjadi 0
-
-      while ((WallY <= InvaderAttackY) && (WallY < WALL_HEIGHT) && (INVADER_ATTACK->Status == ACTIVE))  // Jika Y dinding kurang atau sama, serta Y dinding lebih kecil dari tinggi dinding, dan serangan "ACTIVE"
-      {
-        unsigned char Idx = (WallY * WALL_WIDTH_IN_BYTES) + (X >> 2);  // Menghitung indeks byte dalam data grafis dinding (Wall[i].Gfx) berdasarkan koordinat Y dan X
-        unsigned char TheByte = Wall[i].Gfx[Idx];                      // Mengambil byte dari data grafis dinding pada indeks yang dihitung
-        unsigned char BitIdx = X & 3;                                  // Menghitung indeks bit dalam byte (BitIdx = posisi bit dalam 1 byte, berkisar antara 0-3), X & 3 artinya hanya menggunakan 2 bit terakhir dari X untuk menentukan posisi dalam byte
-        unsigned char Mask = 0b11000000;                               // Membuat masker awal (0b11000000) untuk menghapus/memodifikasi bit tertentu, Masker ini digunakan untuk memilih pasangan bit dalam byte (karena 1 "blok dinding" direpresentasikan oleh 2 bit)
-        Mask = Mask >> (BitIdx << 1);                                  // Geser masker ke kanan sesuai dengan posisi bit (BitIdx), dimana `BitIdx << 1` menggeser masker sebanyak 2 posisi per blok
-        TheByte = TheByte & Mask;                                      // Mengambil hanya pasangan bit yang relevan dari byte dengan operasi AND
-
-        if (TheByte > 0)  // Mengecek apakah pasangan bit yang diambil tidak kosong (ada blok yang terkena)
-        {
-          Mask = ~Mask;                                // Membalikkan masker untuk mempersiapkan penghapusan blok yang terkena
-          Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask;  // Menghapus blok yang terkena dari data grafis dinding
-
-          if (X > 0)  // Jika posisi X lebih besar dari 0 (bukan tepi kiri dinding)
-          {
-            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT))  // Memutuskan secara acak apakah akan merusak blok di kiri
-            {
-              if (X != 4)  // Jika X bukan posisi blok ke-4
-              {
-                Mask = (Mask << 1) | 1;                      // Geser masker ke kiri 1 bit dan tambahkan bit '1' di ujung kanan
-                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask;  // Terapkan masker untuk merusak blok di kiri
-              } else                                         // Jika X adalah posisi blok ke-4
-              {
-                Wall[i].Gfx[Idx - 1] = Wall[i].Gfx[Idx - 1] & 0b11111110;  // Modifikasi byte sebelumnya untuk merusak blok di tepi
-              }
-            }
-          }
-          if (X < 7)  // Jika posisi X lebih kecil dari 7 (bukan tepi kanan dinding)
-          {
-            if (random(CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT))  // Memutuskan secara acak apakah akan merusak blok di kanan
-            {
-              if (X != 3)  // Jika X bukan posisi blok ke-3
-              {
-                Mask = (Mask >> 1) | 128;                    // Geser masker ke kanan 1 bit dan tambahkan bit '1' di ujung kiri
-                Wall[i].Gfx[Idx] = Wall[i].Gfx[Idx] & Mask;  // Terapkan masker untuk merusak blok di kanan
-              } else                                         // Jika X adalah posisi blok ke-3
-              {
-                Wall[i].Gfx[Idx + 1] = Wall[i].Gfx[Idx + 1] & 0b01111111;  // Modifikasi byte berikutnya untuk merusak blok di tepi
-              }
-            }
-          }
-          if (random(CHANCE_ATTACK_PENETRATING_DOWN) == false)  // Memutuskan secara acak apakah serangan menembus dinding lebih jauh ke bawah
-          {
-            INVADER_ATTACK->Status = EXPLODING;  // Jika tidak menembus lebih jauh, ubah status serangan menjadi "EXPLODING"
-          }
-        } else {
-          WallY++;  // Jika tidak ada blok yang terkena, pindah ke baris berikutnya di dinding (WallY++)
-        }
-      }
-    }
-  }
-}
-
-// Fungsi mengecek tabrakan peluru ke dinding
-void BulletAndWallCollision() {
-  // LANJUT DISINI ( •̀ ω •́ )✧
-}
 
 // Fungsi untuk mengecek tabarakan antara Bullet dan Mothership
 void MothershipCollision() {
