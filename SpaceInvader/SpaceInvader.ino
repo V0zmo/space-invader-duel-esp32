@@ -26,8 +26,28 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define SCREEN_WIDTH 128   // Lebar tampilan OLED, dalam piksel
 #define SCREEN_HEIGHT 64   // Tinggi tampilan OLED, dalam piksel
 
+/*
+
+UNTUK DIRIKU DIMASA DEPAN HARAP MAINKAN GAMENYA LAGI TERUS PERHATIKAN BAGIAN
+AUDIO. KAMU DITUGASKAN UNTUK MEMPERBAIKI AUDIO! KERJAKAN PADA HARI SENIN
+KARENA MINGGU ADALAH WAKTU ISTIRAHATMU!
+
+JANGAN DIPERBUDAK!!!
+
+*/
+
+
 // BAGIAN AUDIO
-#define AUDIO_VOLUME 25  // Besar suara audio
+#define AUDIO_VOLUME 25                // Besar suara audio
+#define BGM_01 1                       // BGM 1
+#define PLAYER_SHOOT_SFX 2             // Audio pemain menembak
+#define PLAYER_DIE_SFX 3               // Audio pemain mati
+#define INVADER_MOVE_SFX 4             // Audio Invader jalan
+#define INVADER_SHOOT_SFX 5            // Audio Invader menembak
+#define INVADER_DIE_SFX 6              // Audio Invader mati
+#define MOTHERSHIP_SFX 7               // Audio Mothership
+#define MOTHERSHIP_DIE_SFX 8           // Audio Mothership meledak
+#define BULLET_ATTACK_COLLISION_SFX 9  // Peluru dan serangan bentrok
 
 // BAGIAN TOMBOL
 #define SHOOT_BUTTON 12  // Pin tombol 1
@@ -50,6 +70,7 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define BULLET_WIDTH 2          // Lebar peluru
 #define BULLET_HEIGHT 7         // Panjang peluru
 #define BULLET_SPEED 4          // Kecepatana peluru (semakin besar semakin cepat)
+#define SHOOT_COOLDOWN 15       // Cooldown serangan pemain
 
 // BAGIAN MOTHERSHIP
 #define MOTHERSHIP_WIDTH 8                // Panjang Mothership
@@ -59,24 +80,22 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #define DISPLAY_MOTHERSHIP_BONUS_TIME 25  // Berapa lama bonus tetap berada di layar untuk menampilkan Mothership
 
 // BAGIAN INVADER
-#define NUM_INVADER_COLUMNS 7                    // Jumlah invader lurus ke kanan
-#define NUM_INVADER_ROWS 3                       // Jumlah invader lurus ke bawah
-#define SPACE_BETWEEN_INVADER_COLUMNS 5          // Jarak antara invader dari kanan
-#define SPACE_BETWEEN_INVADER_ROWS 16            // Jarak antara invader dari bawah
-#define INVADER_WIDTH 8                          // Ukuran lebar terbesar invader
-#define INVADER_HEIGHT 8                         // Ukuran lebar terbesar invader
-#define X_START_OFFSET 6                         // Offset X lokasi invader
-#define AMOUNT_TO_DROP_PER_LEVEL 4               // Seberapa jauh Invader turun tiap level baru
-#define INVADERS_DROP 4                          // Seberapa jauh invader jatuh dalam pixel
-#define INVADERS_SPEED 12                        // Kecepatan invader (semakin rendah semakin cepat)
-#define LEVEL_RESET_TO_START_HEIGHT 4            // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
-#define INVADER_X_MOVE_AMOUNT 1                  // Jumlah pixel tiap mulai ronde baru
-#define CHANCE_ATTACK 20                         // Semakin besar semakin kecil persentase Invader menyerang pemain
-#define ATTACK_WIDTH 4                           // Lebar serangan Invader
-#define ATTACK_HEIGHT 8                          // Tinggi serangan Invader
-#define MAX_ATTACK 3                             // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
-#define CHANCE_ATTACK_DAMAGE_TO_LEFT_OR_RIGHT 3  // Peluang attack musuh mengenai kiri atau kanan, semakin tinggi nilanya semakin tinggi juga peluangnya
-#define CHANCE_ATTACK_PENETRATING_DOWN 3         // Peluang serangan menembus bawah, semakin tinggi nilanya semakin tinggi juga peluangnya
+#define NUM_INVADER_COLUMNS 7            // Jumlah invader lurus ke kanan
+#define NUM_INVADER_ROWS 3               // Jumlah invader lurus ke bawah
+#define SPACE_BETWEEN_INVADER_COLUMNS 5  // Jarak antara invader dari kanan
+#define SPACE_BETWEEN_INVADER_ROWS 16    // Jarak antara invader dari bawah
+#define INVADER_WIDTH 8                  // Ukuran lebar terbesar invader
+#define INVADER_HEIGHT 8                 // Ukuran lebar terbesar invader
+#define X_START_OFFSET 6                 // Offset X lokasi invader
+#define AMOUNT_TO_DROP_PER_LEVEL 4       // Seberapa jauh Invader turun tiap level baru
+#define INVADERS_DROP 4                  // Seberapa jauh invader jatuh dalam pixel
+#define INVADERS_SPEED 12                // Kecepatan invader (semakin rendah semakin cepat)
+#define LEVEL_RESET_TO_START_HEIGHT 4    // Setiap kelipatan dari tingkat ini, posisi awal y akan diatur ulang ke atas
+#define INVADER_X_MOVE_AMOUNT 1          // Jumlah pixel tiap mulai ronde baru
+#define CHANCE_ATTACK 20                 // Semakin besar semakin kecil persentase Invader menyerang pemain
+#define ATTACK_WIDTH 4                   // Lebar serangan Invader
+#define ATTACK_HEIGHT 8                  // Tinggi serangan Invader
+#define MAX_ATTACK 3                     // Jumlah maksimum bom yang diizinkan untuk dijatuhkan dalam satu waktu
 
 // STRUKTUR GAME
 
@@ -96,6 +115,7 @@ struct PlayerStruct {
   unsigned char KillCount;            // Invader yang dibunuh
   unsigned char InvaderSpeed;         // Semakin tinggi semakin lambat, di kalkulasi saat Invader dibunuh
   unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
+  unsigned char ShootCooldown;        // Cooldown serang
 };
 
 // Struktur untuk Invader
@@ -107,8 +127,9 @@ struct InvaderStruct {
 // GLOBAL VARIABLE
 
 // Global audio
-static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
 static const uint8_t PIN_MP3_RX = 27;  // Menghubungkan ke TX modul
+static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
+bool ImportantAudioPlayed = false;     // Cek apabila audio penting sedang jalan (BGM dan Mothership)
 
 // Global Game
 unsigned int HighScore;   // Skor tertinggi dalam game secara global
@@ -470,6 +491,7 @@ void InitPlayer() {
   Player.Lives = PLAYER_LIVES;    // Atur nyawa pemain
   Player.Level = 0;               // Atur level yang diraih pemain jadi 0
   Player.Score = 0;               // Atur skor pemain menjadi 0
+  Player.ShootCooldown = 0;       // Atur cooldown pemain jadi 0
   Bullet.Status = DESTROYED;      // Atur agar status "Bullet" menjadi "DESTROYED"
 }
 
@@ -483,11 +505,20 @@ void PlayerControlUpdate() {
   {
     Player.Ord.X -= PLAYER_X_MOVE_AMOUNT;  // Majukan pemain ke kiri
   }
-  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Status != ACTIVE))  // Jika tombol tembak ditekan dan status peluru tidak aktif
+  if (Player.ShootCooldown > 0)  // Jika cooldown belum habis
   {
+    Player.ShootCooldown--;  // Kurangi cooldown
+  }
+  if ((digitalRead(SHOOT_BUTTON) == false) && (Bullet.Status != ACTIVE) && (Player.ShootCooldown == 0))  // Jika tombol tembak ditekan dan status peluru tidak aktif
+  {
+    Player.ShootCooldown = SHOOT_COOLDOWN;         // Terapkan serangan cooldown
     Bullet.X = Player.Ord.X + (PLAYER_WIDTH / 2);  // Atur posisi X peluru sesuai lokasi pemain
     Bullet.Y = PLAYER_Y_START;                     // Atur posisi Y peluru sesuai lokasi Y awal pemain
     Bullet.Status = ACTIVE;                        // Atur kondisi peluru menjadi aktif
+    if (!ImportantAudioPlayed)                     // Jika audio penting tidak jalan
+    {
+      mpPlayer.play(PLAYER_SHOOT_SFX);  // Mainkan audio player menembak
+    }
   }
 }
 
@@ -558,6 +589,10 @@ void InvaderControlUpdate() {
     }
     InvadersMoveCounter = INVADERS_SPEED;  // Reset InvadersMoveCounter dengan INVADERS_SPEED (12)
     InvaderFrame = !InvaderFrame;          // Tukar frame dengan frame lain
+    if (!ImportantAudioPlayed)             // Jika audio Mothership tidak jalan
+    {
+      mpPlayer.play(INVADER_MOVE_SFX);  // Mainkan audio Invader jalan
+    }
 
     if (random(CHANCE_ATTACK) == 1)  // Cek kemungkinan musuh menyerang
     {
@@ -617,7 +652,11 @@ void InvaderAttacking() {
         InvaderAttack[AttackIdx].X = Invader[ActiveColumn[ChosenColumn]][Row].Ord.X + int(INVADER_WIDTH / 2);  // Atur serangan pada lokasi Invader
         InvaderAttack[AttackIdx].X = (InvaderAttack[AttackIdx].X - 2) + random(0, 4);                          // Menambahkan randomisasi dari lokasi X Invader
         InvaderAttack[AttackIdx].Y = Invader[ActiveColumn[ChosenColumn]][Row].Ord.Y + 4;                       // Majukan serangan musuh kebawah
-        break;                                                                                                 // Keluar dari "while" loop
+        if (!ImportantAudioPlayed)                                                                             // Jika audio Mothership tidak jalan
+        {
+          mpPlayer.play(INVADER_SHOOT_SFX);  // Mainkan audio Invader menembak
+        }
+        break;  // Keluar dari "while" loop
       }
       Row--;  // Kurangi variable "Row"
     }
@@ -640,17 +679,24 @@ void MothershipControlUpdate() {
   if (Mothership.Ord.Status == ACTIVE)  // Jika status Mothership "ACTIVE"
   {
     Mothership.Ord.X += MothershipSpeed;  // Gerak koordinat X Mothership sesuai dengan "MothershipSpeed"
-    if (MothershipSpeed > 0)              // Jika "MothershipSpeed" lebih besar dari 0 (Ke kanan)
+    if (!ImportantAudioPlayed)            // Cek Jika audio mothership tidak dijalankan
+    {
+      mpPlayer.play(MOTHERSHIP_SFX);  // Mainkan audio Mothership
+      ImportantAudioPlayed = true;    // Beri tanda audio sedang berlangsung
+    }
+    if (MothershipSpeed > 0)  // Jika "MothershipSpeed" lebih besar dari 0 (Ke kanan)
     {
       if (Mothership.Ord.X >= SCREEN_WIDTH)  // Jika Mothership keluar dari layar kanan
       {
         Mothership.Ord.Status = DESTROYED;  // Ubah status Mothership jadi "DESTROYED"
+        ImportantAudioPlayed = false;       // Beri tanda audio sudah selesai
       }
     } else  // Jika "MothershipSpeed" lebih kecil dari 0 (Ke kiri)
     {
       if (Mothership.Ord.X + MOTHERSHIP_WIDTH < 0)  // Jika Mothership keluar dari layar kiri
       {
         Mothership.Ord.Status = DESTROYED;  // Ubah status Mothership jadi "DESTROYED"
+        ImportantAudioPlayed = false;       // Beri tanda audio sudah selesai
       }
     }
   } else  // Jika status Mothership bukan "ACTIVE"
@@ -695,7 +741,12 @@ void BulletAndInvaderCollisions() {
             Player.Score += InvaderScore(down);                                                        // Menambah nilai skor pemain berdasarkan baris bawah mana yang ditembak
             Player.KillCount++;                                                                        // Tambahkan jumlah Invader yang dibunuh
             Player.InvaderSpeed = ((1 - (Player.KillCount / (float)TOTAL_INVADER)) * INVADERS_SPEED);  // Atur kecepatan Invader berdasarkan kalkulasi disamping
-            if (Player.KillCount == TOTAL_INVADER - 2)                                                 // Jika pemain membunuh musuh dan sisa 2
+
+            if (!ImportantAudioPlayed)  // Jika audio Mothership tidak jalan
+            {
+              mpPlayer.play(INVADER_DIE_SFX);  // Mainkan audio Invader meledak
+            }
+            if (Player.KillCount == TOTAL_INVADER - 2)  // Jika pemain membunuh musuh dan sisa 2
             {
               if (InvaderXMoveAmount > 0)  // Jika jalan ke kanan
               {
@@ -766,6 +817,7 @@ void MothershipCollision() {
     if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Mothership.Ord, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT))  // Jika tabrakan terjadi
     {
       Mothership.Ord.Status = EXPLODING;                    // Atur status Mothership menjadi "EXPLODING"
+      ImportantAudioPlayed = false;                         // Matikan audio yang sedang berjalan
       Mothership.ExplosionGfxCounter = EXPLOSION_GFX_TIME;  // Mengatur waktu Invader apabila ditembak
       Bullet.Status = DESTROYED;                            // Mengubah status peluru menjadi "DESTROYED"
       MothershipBonus = random(4);                          // GACHA! (Pilih angka random dari (0-3))
@@ -800,9 +852,10 @@ void MothershipCollision() {
 
 // Fungsi jika pemain tertembak
 void PlayerHit() {
-  Player.Ord.Status = EXPLODING;
-  Player.ExplosionGfxCounter = EXPLOSION_GFX_TIME;
-  Bullet.Status = DESTROYED;
+  Player.Ord.Status = EXPLODING;                    // Ubah status pemain jadi meledak
+  Player.ExplosionGfxCounter = EXPLOSION_GFX_TIME;  // Reset dan atur timer seperti semula
+  Bullet.Status = DESTROYED;                        // Ubah status peluru jadi hancur
+  mpPlayer.play(PLAYER_DIE_SFX);                    // Mainkan audio player meledak
 }
 
 // Fungsi untuk menghilangkan nyawa pemain
@@ -828,7 +881,12 @@ void LoseLife() {
 
 // Fungsi layar main menu
 void MenuScreen() {
-  display.clearDisplay();                 // Membersihkan semua tampilan display
+  display.clearDisplay();             // Membersihkan semua tampilan display
+  if (ImportantAudioPlayed == false)  // Jika tidak ada audio penting dimainkan
+  {
+    mpPlayer.loop(BGM_01);        // Mainkan BGM 1
+    ImportantAudioPlayed = true;  // Cek apabila audio sedang jalan (memastikan audio sekali putar di loop
+  }
   CentreText("Mulai", 0);                 // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Loli Invaders", 12);        // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Tekan tombol tengah", 24);  // Menulis teks ditengah, dengan argumen koordinat Y
@@ -871,7 +929,7 @@ void GameOver() {
     preferences.end();                           // Tutup penyimpanan saat tidak diperlukan
   }
   display.display();  // Tampilkan semua teks diatas
-  delay(2500);        // Kasih jeda waktu
+  delay(2500);        // Memberi jeda
 }
 
 // Fungsi untuk menampilkan status pemain
@@ -891,23 +949,26 @@ void DisplayPlayerStatus(PlayerStruct *PLAYER) {
 
 // Fungsi untuk ke level selanjutnya
 void NextLevel(PlayerStruct *PLAYER) {
-  int YStart;                           // Buat variable untuk menyimpan lokasi awal Y
+  int YStart;  // Buat variable untuk menyimpan lokasi awal Y
+
   for (int i = 0; i < MAX_ATTACK; i++)  // Jika index lebih kecil dari serangan Invader
   {
     InvaderAttack[i].Status = DESTROYED;  // Hancurkan semua serangan musuh
   }
+  ImportantAudioPlayed = false;                                                             // Cek apabila audio sedang jalan (memastikan audio sekali putar di loop
   InvaderFrame = false;                                                                     // Atur frame Invader menjadi "false" atau Diam
   PLAYER->Level++;                                                                          // Naik ke tahap level berikutnya
   YStart = ((PLAYER->Level - 1) % LEVEL_RESET_TO_START_HEIGHT) * AMOUNT_TO_DROP_PER_LEVEL;  // Atur awal lokasi Y sesuai kalkulasi
-  InitInvaders(YStart);                                                                     //Buat Invader baru berdasarkan variable "YStart"
+  InitInvaders(YStart);                                                                     // Buat Invader baru berdasarkan variable "YStart"
   InvaderXMoveAmount = INVADER_X_MOVE_AMOUNT;                                               // Reset variable "InvaderXMoveAmount"
   PLAYER->InvaderSpeed = INVADERS_SPEED;                                                    // Reset kecepatan InvaderSpeed
   PLAYER->KillCount = 0;                                                                    // Reset jumlah Invader yang dibunuh
-  Mothership.Ord.X = -MOTHERSHIP_WIDTH;                                                     // Reset lokasi Mothership
-  Mothership.Ord.Status = DESTROYED;                                                        // Atur status Mothership jadi "DESTROYED"
-  Bullet.Status = DESTROYED;                                                                // Atur status peluru pemain menjadi "DESTROYED"
-  randomSeed(100);                                                                          // Buat seed secara acak
-  DisplayPlayerStatus(&Player);                                                             // Jalankan fungsi "DisplayPlayerStatus"
+  PLAYER->ShootCooldown = 0;
+  Mothership.Ord.X = -MOTHERSHIP_WIDTH;  // Reset lokasi Mothership
+  Mothership.Ord.Status = DESTROYED;     // Atur status Mothership jadi "DESTROYED"
+  Bullet.Status = DESTROYED;             // Atur status peluru pemain menjadi "DESTROYED"
+  randomSeed(100);                       // Buat seed secara acak
+  DisplayPlayerStatus(&Player);          // Jalankan fungsi "DisplayPlayerStatus"
 }
 
 // Fungsi untuk memulai permainan baru
