@@ -1,4 +1,3 @@
-
 # Space Invader Duel with ESP32 [UNDER DEVELOPMENT!!!]
 
 [UNDER DEVELOPMENT!!!]
@@ -9,7 +8,6 @@ A project for making a Space Invader Duel with ESP32. Connection with ESP-NOW.
 **ID:**
 Sebuah proyek untuk membuat Duel Space Invader dengan ESP32. Koneksi dengan ESP-NOW.
 
-
 ## Link Resources
 
 - [ESP32 Pinout, Datasheet, Features & Applications](https://www.theengineeringprojects.com/2020/12/esp32-pinout-datasheet-features-applications.html)
@@ -19,3 +17,4 @@ Sebuah proyek untuk membuat Duel Space Invader dengan ESP32. Koneksi dengan ESP-
 - [Tutorial Video DFPlayer with ESP32](https://www.youtube.com/watch?v=9w_AaIwlsE4)
 - [Tutorial Video Playlist Space Invader with Arduino UNO](https://www.youtube.com/watch?v=Dz9BtsmyHgo&list=PLpyo4J4M9YqL8TxN9orfPCZxZ3JDuNlnG&index=1)
 - [ESP32 Save Data Permanently using Preferences Library](https://randomnerdtutorials.com/esp32-save-data-permanently-preferences/)
+- [ESP-NOW Two-Way Communication Between ESP32 Boards](https://randomnerdtutorials.com/esp-now-two-way-communication-esp32/)

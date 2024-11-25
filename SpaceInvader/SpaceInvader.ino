@@ -1,3 +1,17 @@
+/*
+TODO LIST
+1. Fix Audio BGM_01 not looping in MainMenu()
+2. Fix Audio INVADER_MOVE_SFX overriding other sfx
+3. Fix Audio BULLET_ATTACK_COLLISION_SFX not playing audio (Check SD Card)
+4. Add ESP-NOW to both ESP32 [DONED!!! ( •̀ ω •́ )✧]
+5. Sharing score to duel and compare to both ESP32
+6. Each player advancing to their own stage and level
+7. If 1 player is die. Lose -100 point
+8. The winner based on the high score
+9. For multiplayer add timer between 1-10 minutes
+10. Calculation of the winner is HighScore + (Stage * 10)
+*/
+
 /* 
 PASTIKAN INSTALL LIBRARY DIBAWAH INI!!!
 Tools -> Manage Libraries... atau Ctrl +Shift+I
@@ -14,6 +28,8 @@ Untuk library yang tidak disebut diatas, adalah library bawaan ESP32.
 #include <SoftwareSerial.h>
 #include <DFRobotDFPlayerMini.h>
 #include <Wire.h>
+#include <esp_now.h>
+#include <WiFi.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Preferences.h>
@@ -132,8 +148,9 @@ static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
 bool ImportantAudioPlayed = false;     // Cek apabila audio penting sedang jalan (BGM dan Mothership)
 
 // Global Game
-unsigned int HighScore;   // Skor tertinggi dalam game secara global
-bool GameInPlay = false;  // Apakah game sedang dimainkan
+unsigned int HighScore;      // Skor tertinggi dalam game secara global
+bool GameInPlay = false;     // Apakah game sedang dimainkan
+bool MenuSelection = false;  // Apakah dalam mode menu pilihan
 
 // Global Mothership
 signed char MothershipSpeed;           // Kecepatan Mothership dalam pixel yang dapat diubah
@@ -160,6 +177,21 @@ PlayerStruct Player;                                           // Player global 
 InvaderStruct Invader[NUM_INVADER_COLUMNS][NUM_INVADER_ROWS];  // Buat Invader dengan multidimension array (seperti tabel)
 InvaderStruct Mothership;                                      // Buat Mothership
 GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek serangan musuh
+
+
+
+// MODE MULTIPLAYER
+
+// UBAH SESUAI DENGAN MAC ADDRESS ESP32 MASING-MASING!!!
+// PILIH SATU!
+
+// uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
+uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
+bool Multiplayer = false;                                             // Variabel untuk menyimpan mode permainan
+unsigned long StartTime;                                              // Waktu mulai permainan
+const int GameDuration = 5 * 60 * 1000;                               // Durasi permainan: 5 menit (dalam milidetik)
+
+PlayerStruct Opponent;  // Player musuh global variable
 
 // Graphics Player
 static const unsigned char PLAYER_GFX[] = {
@@ -292,6 +324,19 @@ static const unsigned char EXPLOSION_GFX[] = {
   0x8a
 };
 
+// Fungsi untuk menerima data dari ESP32 lain
+void onDataReceive(const uint8_t *macAddr, const uint8_t *data, int dataLen) {
+  memcpy(&Opponent, data, sizeof(Opponent));                                                                  // Menyalin data yang diterima ke 'Opponent'
+  Serial.println("Data Diterima:");                                                                           // Menampilkan pesan bahwa data diterima
+  Serial.printf("Skor Musuh: %d | Level: %d | Nyawa: %d\n", Opponent.Score, Opponent.Level, Opponent.Lives);  // Menampilkan data lawan
+}
+
+// Fungsi untuk mengonfirmasi pengiriman data
+void onDataSent(const uint8_t *macAddr, esp_now_send_status_t status) {
+  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Data dikirim!" : "Data gagal dikirim!");  // Mengecek apakah data berhasil dikirim atau gagal
+}
+
+// Fungsi inisialisasi utama program
 void setup() {
 
   // Inisiasi untuk perangkat keras
@@ -326,17 +371,25 @@ void setup() {
   display.setTextColor(WHITE);  // Atur warna teks
 
   mpPlayer.volume(AUDIO_VOLUME);  // Atur besar suara audio
+  mpPlayer.play(BGM_01);          // Mainkan BGM pas awal main
 
   InitInvaders(0);  // Manggil fungsi penciptaan Invader
   InitPlayer();     // Manggil fungsi penciptaan Player
 }
 
+// Fungsi perulangan utama program
 void loop() {
-  if (GameInPlay)  // Jika game sedang berlangsung
+  if (GameInPlay && !Multiplayer)  // Jika game sedang berlangsung dan offline
   {
-    Update();  // Perulangan logika game
-    Draw();    // Perulangan pergambaran game
-  } else       // Jika game tidak berlangsung
+    Update();                            // Perulangan logika game
+    Draw();                              // Perulangan pergambaran game
+  } else if (GameInPlay && Multiplayer)  // Jika game sedang berlangsung dan offline
+  {
+    MultiplayerMode();       // Mengaktifkan fitur online
+  } else if (MenuSelection)  // Jika dalam mode seleksi
+  {
+    ModeMenu();  // Fungsi untuk pilihan mode menu
+  } else         // Jika game tidak berlangsung
   {
     MenuScreen();  // Fungsi layar menu
   }
@@ -587,9 +640,9 @@ void InvaderControlUpdate() {
         }
       }
     }
-    InvadersMoveCounter = INVADERS_SPEED;  // Reset InvadersMoveCounter dengan INVADERS_SPEED (12)
-    InvaderFrame = !InvaderFrame;          // Tukar frame dengan frame lain
-    if (!ImportantAudioPlayed)             // Jika audio Mothership tidak jalan
+    InvadersMoveCounter = INVADERS_SPEED;                                                                                                  // Reset InvadersMoveCounter dengan INVADERS_SPEED (12)
+    InvaderFrame = !InvaderFrame;                                                                                                          // Tukar frame dengan frame lain
+    if ((!ImportantAudioPlayed) && (Bullet.Status == DESTROYED) && (Player.Ord.Status == ACTIVE) && (Mothership.Ord.Status == DESTROYED))  // Jika audio Mothership tidak jalan
     {
       mpPlayer.play(INVADER_MOVE_SFX);  // Mainkan audio Invader jalan
     }
@@ -798,8 +851,11 @@ void InvaderAttackCollisions() {
         InvaderAttack[i].Status = DESTROYED;                                                                     // Ubah status menjadi "DESTROYED"
       } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Bullet, BULLET_WIDTH, BULLET_HEIGHT))  // Cek jika serangan bentrok dengan peluru pemain
       {
-        InvaderAttack[i].Status = EXPLODING;                                                                         // Ledakan serangan musuh
-        Bullet.Status = DESTROYED;                                                                                   // Hancurkan peluru pemain
+        InvaderAttack[i].Status = EXPLODING;  // Ledakan serangan musuh
+        Bullet.Status = DESTROYED;            // Hancurkan peluru pemain
+        if (!ImportantAudioPlayed) {
+          mpPlayer.play(BULLET_ATTACK_COLLISION_SFX);
+        }
       } else if (Collision(InvaderAttack[i], ATTACK_WIDTH, ATTACK_HEIGHT, Player.Ord, PLAYER_WIDTH, PLAYER_HEIGHT))  // Cek jika serangan bentrok dengan pemain
       {
         PlayerHit();                          // Jalankan fungsi saat pemain tertembak
@@ -817,6 +873,7 @@ void MothershipCollision() {
     if (Collision(Bullet, BULLET_WIDTH, BULLET_HEIGHT, Mothership.Ord, MOTHERSHIP_WIDTH, MOTHERSHIP_HEIGHT))  // Jika tabrakan terjadi
     {
       Mothership.Ord.Status = EXPLODING;                    // Atur status Mothership menjadi "EXPLODING"
+      mpPlayer.play(MOTHERSHIP_DIE_SFX);                    // Mainkan audio Mothership mati
       ImportantAudioPlayed = false;                         // Matikan audio yang sedang berjalan
       Mothership.ExplosionGfxCounter = EXPLOSION_GFX_TIME;  // Mengatur waktu Invader apabila ditembak
       Bullet.Status = DESTROYED;                            // Mengubah status peluru menjadi "DESTROYED"
@@ -881,11 +938,14 @@ void LoseLife() {
 
 // Fungsi layar main menu
 void MenuScreen() {
-  display.clearDisplay();             // Membersihkan semua tampilan display
-  if (ImportantAudioPlayed == false)  // Jika tidak ada audio penting dimainkan
+  display.clearDisplay();    // Membersihkan semua tampilan display
+  if (mpPlayer.available())  // Cek apakah ada pesan dari DFPlayer. Untuk meng-looping BGM
   {
-    mpPlayer.loop(BGM_01);        // Mainkan BGM 1
-    ImportantAudioPlayed = true;  // Cek apabila audio sedang jalan (memastikan audio sekali putar di loop
+    uint8_t type = mpPlayer.readType();  // Dapatkan jenis pesan
+    if (type == DFPlayerPlayFinished)    // Jika playback selesai
+    {
+      mpPlayer.play(BGM_01);  // Mainkan kembali track 1
+    }
   }
   CentreText("Mulai", 0);                 // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Loli Invaders", 12);        // Menulis teks ditengah, dengan argumen koordinat Y
@@ -897,8 +957,7 @@ void MenuScreen() {
 
   if (digitalRead(SHOOT_BUTTON) == false)  // Jika tombol tembak ditekan
   {
-    GameInPlay = true;  // status game berlangsung aktif
-    NewGame();          // Buat game ronde baru
+    MenuSelection = true;  // Aktifkan mode seleksi menu
   }
 
   if ((digitalRead(LEFT_BUTTON) == false) && (digitalRead(RIGHT_BUTTON) == false))  // Jika tombol kiri dan kanan ditekan bersamaan
@@ -971,10 +1030,72 @@ void NextLevel(PlayerStruct *PLAYER) {
   DisplayPlayerStatus(&Player);          // Jalankan fungsi "DisplayPlayerStatus"
 }
 
+// Fungsi untuk memilih mode permainan
+void ModeMenu() {
+  display.clearDisplay();    // Bersihkan semua tampilan dalam layar
+  if (mpPlayer.available())  // Cek apakah ada pesan dari DFPlayer. Untuk meng-looping BGM
+  {
+    uint8_t type = mpPlayer.readType();  // Dapatkan jenis pesan
+    if (type == DFPlayerPlayFinished)    // Jika playback selesai
+    {
+      mpPlayer.play(BGM_01);  // Mainkan kembali track 1
+    }
+  }
+  CentreText("Pilih Mode", 0);     // Menulis teks ditengah, dengan argumen koordinat Y
+  CentreText("Singleplayer", 12);  // Menulis teks ditengah, dengan argumen koordinat Y
+  CentreText("Multiplayer", 24);   // Menulis teks ditengah, dengan argumen koordinat Y
+  display.display();               // Tampilkan dalam layar
+
+  if (digitalRead(LEFT_BUTTON) == false)  // Jika tombol kiri ditekan
+  {
+    GameInPlay = true;      // status game berlangsung aktif
+    Multiplayer = false;    // Status game singleplayer
+    MenuSelection = false;  // Status mode seleksi matikan
+    NewGame();              // Buat game ronde baru
+  } else if (digitalRead(RIGHT_BUTTON) == false) {
+    GameInPlay = true;      // status game berlangsung aktif
+    Multiplayer = true;     // Status game multiplayer
+    MenuSelection = false;  // Status mode seleksi matikan
+    MultiplayerMode();      // Buat game ronde baru secara multiplayer
+  }
+}
+
 // Fungsi untuk memulai permainan baru
 void NewGame() {
   InitPlayer();
   NextLevel(&Player);
+}
+
+// Fungsi untuk memainkan mode Multiplayer
+void MultiplayerMode() {
+  WiFi.mode(WIFI_STA);  // Mengatur Wi-Fi ESP32 ke mode Station (tidak perlu internet)
+
+  if (esp_now_init() != ESP_OK)  // Mengecek apakah ESP-NOW berhasil diinisialisasi
+  {
+    Serial.println("ESP-NOW gagal diinisialisasi!");  // Menulis teks error
+    return;                                           // Menghentikan eksekusi jika gagal
+  }
+
+  esp_now_register_send_cb(onDataSent);  // Mendaftarkan fungsi untuk mengirim data
+
+  esp_now_peer_info_t peerInfo = {};                // Menambahkan ESP32 lawan sebagai peer
+  memcpy(peerInfo.peer_addr, PlayerMACAddress, 6);  // Menyalin alamat MAC lawan
+  peerInfo.channel = 0;                             // Channel default
+  peerInfo.encrypt = false;                         // Tanpa enkripsi
+
+  if (esp_now_add_peer(&peerInfo) != ESP_OK)  // Mengecek apakah peer berhasil ditambahkan
+  {
+    Serial.println("Gagal menemukan MAC Address lawan!");  // Menulis teks error
+    return;                                                // Menghentikan eksekusi jika gagal
+  }
+
+  esp_now_register_recv_cb(esp_now_recv_cb_t(onDataReceive));  // Mendaftarkan fungsi untuk menerima data
+
+  // TODO
+  // PINDAHKAN PAS BAGIAN AKHIR KALKULASI SKOR
+  esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Kirimkan data pemain kita ke ESP32 lawan
+  // PINDAHKAN PAS BAGIAN AWAL KALKULASI SKOR
+  StartTime = millis();  // Menyimpan waktu mulai permainan
 }
 
 // Fungsi untuk mengecek tabarakan dengan argumen yang dibawah
