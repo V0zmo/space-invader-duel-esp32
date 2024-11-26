@@ -1,7 +1,8 @@
 /*
 TODO LIST
-2. Fix Audio INVADER_MOVE_SFX overriding other sfx
-4. For multiplayer add timer between 1-10 minutes
+1. Fix Audio INVADER_MOVE_SFX overriding other sfx
+2. For multiplayer add timer between 1-10 minutes
+3. Do playtesting to see any bug
 */
 
 /* 
@@ -184,8 +185,8 @@ GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek ser
 // UBAH SESUAI DENGAN MAC ADDRESS ESP32 MASING-MASING!!!
 // PILIH SATU!
 
-uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
-// uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
+// uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
+uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
 bool Multiplayer = false;             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
 bool OpponentActive = false;          // Cek apakah pemain lawan sudah aktif
 const int DurationSeconds = 60;       // Durasi 2 menit dalam detik (120 detik)
@@ -560,7 +561,7 @@ void TimerCallback(void *arg) {
   } else              // Jika timer sudah habis
   {
     esp_timer_stop(Timer);  // Hentikan timer jika sudah habis
-    GameOverScreen();             // Akhiri permainan
+    GameOverScreen();       // Akhiri permainan
   }
 }
 
@@ -579,14 +580,14 @@ void setup() {
 
   // Cek jika Display monitor tidak dapat tersambung
   if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("SSD1306 allocation failed"));  // Tampilkan error dalam Serial Monitor
-    for (;;)                                         // Agar tidak looping
+    Serial.println(F("Alokasi SSD1306 Gagal!"));  // Tampilkan error dalam Serial Monitor
+    for (;;)                                      // Agar tidak looping
       ;
   }
 
   // Cek jika MP Player tidak dapat tersambung
   if (!mpPlayer.begin(softwareSerial)) {
-    Serial.println("Connecting to DFPlayer Mini failed!");  // Tampilkan error dalam Serial Monitor
+    Serial.println("Menyambung Ke DFPlayer Mini Gagal!");  // Tampilkan error dalam Serial Monitor
   }
 
   // BAGIAN STORAGE GAME
@@ -1263,10 +1264,10 @@ void GameOverScreen() {
     int MyScore = Player.Score + (Player.Level * 10);            // Kalkulasi skor pemain
     int OpponentScore = Opponent.Score + (Opponent.Level * 10);  // Kalkulasi skor musuh
 
-    CentreText("Skor milikmu: ", 0);  // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-    display.print(MyScore);           // Tampilkan nyawa pemain
-    CentreText("Skor lawan: ", 12);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-    display.print(OpponentScore);     // Tampilkan nyawa pemain
+    CentreText("Skor milikmu:    ", 0);  // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    display.print(MyScore);              // Tampilkan nyawa pemain
+    CentreText("Skor lawan:    ", 12);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    display.print(OpponentScore);        // Tampilkan nyawa pemain
 
     if (MyScore > OpponentScore)  // Jika skor pemain lebih tinggi
     {
