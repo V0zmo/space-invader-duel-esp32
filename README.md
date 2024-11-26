@@ -18,3 +18,4 @@ Sebuah proyek untuk membuat Duel Space Invader dengan ESP32. Koneksi dengan ESP-
 - [Tutorial Video Playlist Space Invader with Arduino UNO](https://www.youtube.com/watch?v=Dz9BtsmyHgo&list=PLpyo4J4M9YqL8TxN9orfPCZxZ3JDuNlnG&index=1)
 - [ESP32 Save Data Permanently using Preferences Library](https://randomnerdtutorials.com/esp32-save-data-permanently-preferences/)
 - [ESP-NOW Two-Way Communication Between ESP32 Boards](https://randomnerdtutorials.com/esp-now-two-way-communication-esp32/)
+- [SSD1306 OLED Display: draw images, splash and animations – 2](https://mischianti.org/ssd1306-oled-display-draw-images-splash-and-animations-2/)
