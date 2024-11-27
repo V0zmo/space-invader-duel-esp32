@@ -4,6 +4,8 @@
 
 **ESP32 Space Invader** is a 2-player arcade game project based on the **ESP32** microcontroller, developed for a school assignment. The game adopts the classic Space Invader mechanic with a competitive twist where two players can compete for the highest score.
 
+---
+
 ### 📜 Project Description
 
 This game is designed using:
@@ -12,6 +14,8 @@ This game is designed using:
 - **DFPlayerMini**: For sound effects that bring the game experience to life.
 - **OLED Display I2C**: Displays the game in a simple yet attractive graphical format.
 - **3 Button Input**: Left direction, right direction, and a button to shoot.
+
+---
 
 ### 🎯 Main Objective
 
@@ -102,9 +106,13 @@ Developed with ❤️ for a school assignment. All contributions and feedback ar
 
 ---
 
+<br>
+
 ## 🇮🇩 Indonesia 🇮🇩
 
 **ESP32 Space Invader** adalah proyek arcade game 2 pemain berbasis microcontroller **ESP32**, dikembangkan untuk tugas sekolah. Game ini mengadopsi mekanik klasik Space Invader dengan sentuhan kompetitif di mana dua pemain dapat bersaing untuk mendapatkan skor tertinggi.
+
+---
 
 ### 📜 Deskripsi Proyek
 
@@ -114,6 +122,8 @@ Game ini dirancang menggunakan:
 - **DFPlayerMini**: Untuk efek suara yang menghidupkan pengalaman bermain.
 - **OLED Display**: Menampilkan permainan dalam format grafis sederhana namun menarik.
 - **Input 3 Tombol**: Arah kiri, kanan, dan tombol untuk menembak.
+
+---
 
 ### 🎯 Tujuan Utama
 
@@ -185,6 +195,8 @@ Berikut ini adalah materi sumber daya dari internet, memberikan informasi yang b
 - [ESP32 Save Data Permanently using Preferences Library](https://randomnerdtutorials.com/esp32-save-data-permanently-preferences/)
 - [ESP-NOW Two-Way Communication Between ESP32 Boards](https://randomnerdtutorials.com/esp-now-two-way-communication-esp32/)
 - [SSD1306 OLED Display: draw images, splash and animations – 2](https://mischianti.org/ssd1306-oled-display-draw-images-splash-and-animations-2/)
+
+---
 
 ### 🚀 Pengembangan di Masa Depan
 
