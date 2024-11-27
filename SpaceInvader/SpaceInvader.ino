@@ -14,10 +14,6 @@ Synchronization finishes the game, if one player finishes first then wait for th
 Correct the score comparison where both players are declared to have won, even though one has a lower score.
 If a player dies, wait for the opponent's game to finish playing.
 
-Add a feature to turn the volume up and down with a key combination.
-
-Score cannot be lower than 0 [DONED!!! ( •̀ ω •́ )✧]
-
 Do playtesting to see any bug
 */
 
@@ -64,7 +60,6 @@ JANGAN DIPERBUDAK!!!
 
 
 // BAGIAN AUDIO
-#define AUDIO_VOLUME 25                                // Besar suara audio
 #define LOLICORP_AUDIO 1                               // Lolicorp
 #define NO_HOPE_ENGINE_AUDIO 2                         // No Hope Engine
 #define MENDOBRAK_KEHIDUPAN_IOT_ENTERTAINMENT_AUDIO 3  // Mendobrak Kehidupan IoT Entertainment
@@ -162,11 +157,12 @@ static const uint8_t PIN_MP3_TX = 26;  // Menghubungkan ke RX modul
 bool ImportantAudioPlayed = false;     // Cek apabila audio penting sedang jalan (BGM dan Mothership)
 
 // Global Game
-unsigned int HighScore;      // Skor tertinggi dalam game secara global
-bool StartUp = false;        // Tampilkan menu Start up saat pertama kali dijalankan
-bool MenuSelection = false;  // Apakah dalam mode menu pilihan
-bool GameInPlay = false;     // Apakah game sedang dimainkan
-bool GameOver = false;       // Apakah pemain mengalami game over
+unsigned int HighScore;          // Skor tertinggi dalam game secara global
+unsigned char VolumeAudio = 25;  // Atur besar volume suara untuk DFPlayer Mini
+bool StartUp = false;            // Tampilkan menu Start up saat pertama kali dijalankan
+bool MenuSelection = false;      // Apakah dalam mode menu pilihan
+bool GameInPlay = false;         // Apakah game sedang dimainkan
+bool GameOver = false;           // Apakah pemain mengalami game over
 
 // Global Mothership
 signed char MothershipSpeed;           // Kecepatan Mothership dalam pixel yang dapat diubah
@@ -201,12 +197,12 @@ GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek ser
 // UBAH SESUAI DENGAN MAC ADDRESS ESP32 MASING-MASING!!!
 // PILIH SATU!
 
-// uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
-uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
-bool Multiplayer = false;                                             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
-bool OpponentActive = false;                                          // Cek apakah pemain lawan sudah aktif
-const int DurationSeconds = 60;                                       // Durasi 2 menit dalam detik (120 detik)
-int RemainingTime = DurationSeconds;                                  // sisa waktu yang ada berdasarkan durasi detik
+uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
+// uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
+bool Multiplayer = false;             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
+bool OpponentActive = false;          // Cek apakah pemain lawan sudah aktif
+const int DurationSeconds = 60;       // Durasi 2 menit dalam detik (120 detik)
+int RemainingTime = DurationSeconds;  // sisa waktu yang ada berdasarkan durasi detik
 
 esp_timer_handle_t Timer;  // Inisiasi timer bawaan ESP32
 PlayerStruct Opponent;     // Player musuh global variable
@@ -625,7 +621,7 @@ void setup() {
   display.setTextSize(1);       // Atur ukuran teks
   display.setTextColor(WHITE);  // Atur warna teks
 
-  mpPlayer.volume(AUDIO_VOLUME);  // Atur besar suara audio pada awal inisiasi (0-30)
+  mpPlayer.volume(VolumeAudio);  // Atur besar suara audio pada awal inisiasi (0-30)
 
   InitInvaders(0);  // Manggil fungsi penciptaan Invader
   InitPlayer();     // Manggil fungsi penciptaan Player
@@ -1260,10 +1256,24 @@ void MenuScreen() {
 
   if (digitalRead(SHOOT_BUTTON) == false)  // Jika tombol tembak ditekan
   {
-    MenuSelection = true;  // Aktifkan mode seleksi menu
-  }
-
-  if ((digitalRead(LEFT_BUTTON) == false) && (digitalRead(RIGHT_BUTTON) == false))  // Jika tombol kiri dan kanan ditekan bersamaan
+    MenuSelection = true;                        // Aktifkan mode seleksi menu
+  } else if (digitalRead(LEFT_BUTTON) == false)  // Jika tombol sebelah kiri ditekan
+  {
+    if (VolumeAudio > 0)  // Jika volume audio lebih tinggi dari minimal besar suara audio
+    {
+      VolumeAudio--;                 // Kurangi nilai variable volume suara
+      mpPlayer.volume(VolumeAudio);  // Atur besar suara audio pada awal inisiasi (0-30)
+      delay(200);                    // Debounce tombol
+    }
+  } else if (digitalRead(RIGHT_BUTTON) == false)  // Jika tombol sebelah kanan ditekan
+  {
+    if (VolumeAudio < 30)  // Jika volume audio lebih rendah dari maksimal besar suara audio
+    {
+      VolumeAudio++;                 // Tambah nilai variable volume suara
+      mpPlayer.volume(VolumeAudio);  // Atur besar suara audio pada awal inisiasi (0-30)
+      delay(200);                    // Debounce tombol
+    }
+  } else if ((digitalRead(LEFT_BUTTON) == false) && (digitalRead(RIGHT_BUTTON) == false))  // Jika tombol kiri dan kanan ditekan bersamaan
   {
     //TOLONG DITAMBAHKAN FITUR DEBOUNCE ATAU WAKTU LAMA PENEKANAN AGAR TIDAK TERJADI KETIDAK SENGAJAAN RESET SKOR
     HighScore = 0;                               // Reset skor tertinggi menjadi 0
@@ -1287,9 +1297,9 @@ void GameOverScreen() {
     int OpponentScore = Opponent.Score + (Opponent.Level * 10);  // Kalkulasi skor musuh
 
     CentreText("Skor milikmu: ", 0);  // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-    display.print(MyScore);              // Tampilkan nyawa pemain
+    display.print(MyScore);           // Tampilkan nyawa pemain
     CentreText("Skor lawan: ", 12);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-    display.print(OpponentScore);        // Tampilkan nyawa pemain
+    display.print(OpponentScore);     // Tampilkan nyawa pemain
 
     if (MyScore > OpponentScore)  // Jika skor pemain lebih tinggi
     {
@@ -1410,6 +1420,14 @@ void NewGame() {
 
 // Fungsi untuk memainkan mode Multiplayer
 void MultiplayerMode() {
+  if (mpPlayer.available())  // Cek apakah ada pesan dari DFPlayer. Untuk meng-looping BGM
+  {
+    uint8_t type = mpPlayer.readType();  // Dapatkan jenis pesan
+    if (type == DFPlayerPlayFinished)    // Jika playback selesai
+    {
+      mpPlayer.play(BGM_01);  // Mainkan kembali track 1
+    }
+  }
   const int MaxRetries = 10;    // Jumlah maksimal sambung ulang
   const int RetryDelay = 2000;  // Jumlah jeda antar percobaan (ms)
   int Attempts = 0;             // Jumlah percobaan yang sudah dijalankan
