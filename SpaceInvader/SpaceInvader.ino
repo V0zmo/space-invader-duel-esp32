@@ -3,16 +3,16 @@ TODO LIST
 
 Fix Audio INVADER_MOVE_SFX overriding other sfx
 
-For multiplayer add timer between 1-10 minutes
-
 Increase volume (db) on Start-Up audio (Within audio file)
 
 Synchronized start of the game, both players must start simultaneously with no one starting first.
-Bug when one player plays and the other does not play (out of the game)
+Bug when one player plays and the other does not play (out of the game) <- May get fixed when above being implemented
+
+For multiplayer can adjust timer between 1-10 minutes both player decided the timer and take the middle number (Player 1 chooses 60 Seconds and Player 2 chooses 180 Seconds)
 
 Synchronization finishes the game, if one player finishes first then wait for the other player to finish.
-Correct the score comparison where both players are declared to have won, even though one has a lower score.
-If a player dies, wait for the opponent's game to finish playing.
+Correct the score comparison where both players are declared to have won, even though one has a lower score. <- May get fixed when above being implemented
+If a player dies, wait for the opponent's game to finish playing. <- May get fixed when first above being implemented 
 
 Do playtesting to see any bug
 */
@@ -141,6 +141,7 @@ struct PlayerStruct {
   unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
   unsigned char ShootCooldown;        // Cooldown serang
   bool MultiplayerReady;              // Cek apakah pemain masuk dalam mode multiplayer
+  bool MultiplayerGameReady;          // Cek apakah pemain sudah siap bermain mode multiplayer
 };
 
 // Struktur untuk Invader
@@ -197,12 +198,13 @@ GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek ser
 // UBAH SESUAI DENGAN MAC ADDRESS ESP32 MASING-MASING!!!
 // PILIH SATU!
 
-uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
-// uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
-bool Multiplayer = false;             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
-bool OpponentActive = false;          // Cek apakah pemain lawan sudah aktif
-const int DurationSeconds = 60;       // Durasi 2 menit dalam detik (120 detik)
-int RemainingTime = DurationSeconds;  // sisa waktu yang ada berdasarkan durasi detik
+// uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
+uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
+bool Multiplayer = false;                                             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
+bool OpponentActive = false;                                          // Cek apakah pemain lawan sudah aktif
+bool OpponentGameReady = false;                                       // Cek apakah pemain lawan sudah aktif
+const int DurationSeconds = 60;                                       // Durasi 2 menit dalam detik (120 detik)
+int RemainingTime = DurationSeconds;                                  // sisa waktu yang ada berdasarkan durasi detik
 
 esp_timer_handle_t Timer;  // Inisiasi timer bawaan ESP32
 PlayerStruct Opponent;     // Player musuh global variable
@@ -547,8 +549,12 @@ void onDataReceive(const uint8_t *macAddr, const uint8_t *data, int dataLen) {
   memcpy(&Opponent, data, sizeof(Opponent));  // Menyalin data yang diterima ke 'Opponent'
   if (Opponent.MultiplayerReady)              // Periksa apakah lawan sudah siap
   {
-    Serial.println("Lawan Sudah Siap!");  // Memberitahukan pesan bahwa musuh siap dalam mode Multiplayer di Serial Monitor
-    OpponentActive = true;                // Memberitahukan bahwa musuh telah siap bermain secara Multiplayer
+    Serial.println("Lawan Sudah Ditemuka!");  // Memberitahukan pesan bahwa musuh siap dalam mode Multiplayer di Serial Monitor
+    OpponentActive = true;                    // Memberitahukan bahwa musuh telah hidupkan fitur Multiplayer
+  }
+  if (Opponent.MultiplayerGameReady) {
+    Serial.println("Lawan Siap Bermain!");  // Memberitahukan pesan bahwa musuh siap bermain dalam mode Multiplayer di Serial Monitor
+    OpponentGameReady = true;               // Memberitahukan bahwa musuh telah siap bermain dalam Multiplayer
   }
   Serial.println("Data Diterima:");                                                                           // Menampilkan pesan bahwa data diterima di Serial Monitor
   Serial.printf("Skor Lawan: %d | Level: %d | Nyawa: %d\n", Opponent.Score, Opponent.Level, Opponent.Lives);  // Menampilkan data lawan di Serial Monitor
@@ -1444,12 +1450,12 @@ void MultiplayerMode() {
       CentreText("ESP-NOW", 12);                                 // Menulis teks error sesuai argumen teks dan koordinat Y
       CentreText("Gagal Diinisialisasi.", 24);                   // Menulis teks error sesuai argumen teks dan koordinat Y
       CentreText("Mencoba Ulang", 36);                           // Menulis teks error sesuai argumen teks dan koordinat Y
-      Attempts++;                                                // Tambahkan nilai percobaan
       display.setCursor((SCREEN_WIDTH / 2) - 44, 48);            // Atur text ditengah
       display.printf("Percobaan: %d/%d", Attempts, MaxRetries);  // Tampilkan berapa banyak percobaan yang berlangsung
       display.display();                                         // Memunculkan semua gambar display
       delay(RetryDelay);                                         // Memberi jeda koneksi
 
+      Attempts++;                  // Tambahkan nilai percobaan
       if (Attempts >= MaxRetries)  // Jika percobaan koneksi sudah mencapai batas
       {
         display.clearDisplay();                   // Menghilangkan semua benda di layar
@@ -1463,6 +1469,7 @@ void MultiplayerMode() {
         return;                                   // Keluar dari kodingan
       }
     }
+
     Attempts = 0;  // Atur ulang percobaan
 
     esp_now_register_send_cb(onDataSent);  // Mendaftarkan fungsi untuk mengirim data
@@ -1494,12 +1501,12 @@ void MultiplayerMode() {
       CentreText("Gagal Menambahkan", 12);                       // Menulis teks error sesuai argumen teks dan koordinat Y
       CentreText("Alamat Lawan.", 24);                           // Menulis teks error sesuai argumen teks dan koordinat Y
       CentreText("Mencoba Ulang", 36);                           // Menulis teks error sesuai argumen teks dan koordinat Y
-      Attempts++;                                                // Tambahkan nilai percobaan
       display.setCursor((SCREEN_WIDTH / 2) - 44, 48);            // Atur text ditengah
       display.printf("Percobaan: %d/%d", Attempts, MaxRetries);  // Tampilkan berapa banyak percobaan yang berlangsung
       display.display();                                         // Memunculkan semua gambar display
       delay(RetryDelay);                                         // Memberi jeda koneksi
 
+      Attempts++;                  // Tambahkan nilai percobaan
       if (Attempts >= MaxRetries)  // Jika percobaan koneksi sudah mencapai batas
       {
         display.clearDisplay();                   // Menghilangkan semua benda di layar
@@ -1528,12 +1535,12 @@ void MultiplayerMode() {
     CentreText("Multiplayer", 0);                              // Menulis teks ditengah, dengan argumen koordinat Y
     CentreText("Lawan Tidak Ditemukan", 24);                   // Menulis teks error sesuai argumen teks dan koordinat Y
     CentreText("Mencoba Ulang", 36);                           // Menulis teks error sesuai argumen teks dan koordinat Y
-    Attempts++;                                                // Tambahkan nilai percobaan
     display.setCursor((SCREEN_WIDTH / 2) - 44, 48);            // Atur text ditengah
     display.printf("Percobaan: %d/%d", Attempts, MaxRetries);  // Tampilkan berapa banyak percobaan yang berlangsung
     display.display();                                         // Memunculkan semua gambar display
     delay(RetryDelay);                                         // Memberi jeda koneksi
 
+    Attempts++;                  // Tambahkan nilai percobaan
     if (Attempts >= MaxRetries)  // Jika percobaan sudah lebih atau sama dengan maksimal percobaan
     {
       display.clearDisplay();                   // Menghilangkan semua benda di layar
@@ -1548,14 +1555,26 @@ void MultiplayerMode() {
     }
   }
 
-  display.clearDisplay();          // Menghilangkan semua benda di layar
-  CentreText("Multiplayer", 0);    // Menulis teks ditengah, dengan argumen koordinat Y
-  CentreText("Kedua Pemain", 24);  // Menulis teks berhasil sesuai argumen teks dan koordinat Y
-  CentreText("Sudah Siap!", 36);   // Menulis teks berhasil sesuai argumen teks dan koordinat Y
-  display.display();               // Memunculkan semua gambar display
-  delay(RetryDelay);               // Memberi jeda sebelum kembali ke menu utama
-  GameInPlay = true;               // Permainan dijalankan
-  NewGame();                       // Jalankan permainan baru
+  OpponentGameReady = false;           // Mereset bahwa musuh belum siap bermain
+  Player.MultiplayerGameReady = true;  // Mengatur bahwa pemain sudah siap bermain
+
+  while ((Player.MultiplayerReady) && (OpponentActive))  // Jika kedua pemain fitur multiplayer sudah aktif dan telah ditemukan
+  {
+    esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Mengirim data ke pemain lawan, untuk kasus ini pemain sudah siap bermain multiplayer
+
+    if ((Player.MultiplayerGameReady) && (OpponentGameReady))  // Jika kedua pemain sudah siap bermain game multiplayer
+    {
+      display.clearDisplay();          // Menghilangkan semua benda di layar
+      CentreText("Multiplayer", 0);    // Menulis teks ditengah, dengan argumen koordinat Y
+      CentreText("Kedua Pemain", 24);  // Menulis teks berhasil sesuai argumen teks dan koordinat Y
+      CentreText("Sudah Siap!", 36);   // Menulis teks berhasil sesuai argumen teks dan koordinat Y
+      display.display();               // Memunculkan semua gambar display
+      delay(RetryDelay);               // Memberi jeda sebelum kembali ke menu utama
+      GameInPlay = true;               // Permainan dijalankan
+      NewGame();                       // Jalankan permainan baru
+      break;
+    }
+  }
 }
 
 // Fungsi untuk menghapus jaringan ESP-NOW agar menghemat sumber daya dan mencegah konflik jaringan.
