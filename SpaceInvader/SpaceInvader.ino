@@ -1,8 +1,24 @@
 /*
 TODO LIST
-1. Fix Audio INVADER_MOVE_SFX overriding other sfx
-2. For multiplayer add timer between 1-10 minutes
-3. Do playtesting to see any bug
+
+Fix Audio INVADER_MOVE_SFX overriding other sfx
+
+For multiplayer add timer between 1-10 minutes
+
+Increase volume (db) on Start-Up audio (Within audio file)
+
+Synchronized start of the game, both players must start simultaneously with no one starting first.
+Bug when one player plays and the other does not play (out of the game)
+
+Synchronization finishes the game, if one player finishes first then wait for the other player to finish.
+Correct the score comparison where both players are declared to have won, even though one has a lower score.
+If a player dies, wait for the opponent's game to finish playing.
+
+Add a feature to turn the volume up and down with a key combination.
+
+Score cannot be lower than 0 [DONED!!! ( •̀ ω •́ )✧]
+
+Do playtesting to see any bug
 */
 
 /* 
@@ -187,10 +203,10 @@ GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek ser
 
 // uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
 uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
-bool Multiplayer = false;             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
-bool OpponentActive = false;          // Cek apakah pemain lawan sudah aktif
-const int DurationSeconds = 60;       // Durasi 2 menit dalam detik (120 detik)
-int RemainingTime = DurationSeconds;  // sisa waktu yang ada berdasarkan durasi detik
+bool Multiplayer = false;                                             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
+bool OpponentActive = false;                                          // Cek apakah pemain lawan sudah aktif
+const int DurationSeconds = 60;                                       // Durasi 2 menit dalam detik (120 detik)
+int RemainingTime = DurationSeconds;                                  // sisa waktu yang ada berdasarkan durasi detik
 
 esp_timer_handle_t Timer;  // Inisiasi timer bawaan ESP32
 PlayerStruct Opponent;     // Player musuh global variable
@@ -609,7 +625,7 @@ void setup() {
   display.setTextSize(1);       // Atur ukuran teks
   display.setTextColor(WHITE);  // Atur warna teks
 
-  mpPlayer.volume(AUDIO_VOLUME);  // Atur besar suara audio
+  mpPlayer.volume(AUDIO_VOLUME);  // Atur besar suara audio pada awal inisiasi (0-30)
 
   InitInvaders(0);  // Manggil fungsi penciptaan Invader
   InitPlayer();     // Manggil fungsi penciptaan Player
@@ -1168,7 +1184,13 @@ void PlayerHit() {
   Bullet.Status = DESTROYED;                        // Ubah status peluru jadi hancur
   mpPlayer.play(PLAYER_DIE_SFX);                    // Mainkan audio player meledak
   if (Multiplayer) {
-    Player.Score -= 100;  // Kurangi skor pemain jika mati dalam mode Multiplayer
+    if (Player.Score > 100)  // Jika skor pemain lebih tinggi dari nilai 100
+    {
+      Player.Score -= 100;  // Kurangi skor pemain senilai 100 jika mati dalam mode Multiplayer
+    } else                  // Jika skor pemain lebih rendah dari nilai 100
+    {
+      Player.Score = 0;  // Atur skor pemain jadi nilai 0 jika tidak maka nilanya jadi gila
+    }
   }
 }
 
@@ -1264,9 +1286,9 @@ void GameOverScreen() {
     int MyScore = Player.Score + (Player.Level * 10);            // Kalkulasi skor pemain
     int OpponentScore = Opponent.Score + (Opponent.Level * 10);  // Kalkulasi skor musuh
 
-    CentreText("Skor milikmu:    ", 0);  // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    CentreText("Skor milikmu: ", 0);  // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
     display.print(MyScore);              // Tampilkan nyawa pemain
-    CentreText("Skor lawan:    ", 12);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    CentreText("Skor lawan: ", 12);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
     display.print(OpponentScore);        // Tampilkan nyawa pemain
 
     if (MyScore > OpponentScore)  // Jika skor pemain lebih tinggi
