@@ -5,12 +5,10 @@ Fix Audio INVADER_MOVE_SFX overriding other sfx
 
 Increase volume (db) on Start-Up audio (Within audio file)
 
-Synchronized start of the game, both players must start simultaneously with no one starting first.
-Bug when one player plays and the other does not play (out of the game) <- May get fixed when above being implemented
-
 For multiplayer can adjust timer between 1-10 minutes both player decided the timer and take the middle number (Player 1 chooses 60 Seconds and Player 2 chooses 180 Seconds)
 
 Synchronization finishes the game, if one player finishes first then wait for the other player to finish.
+A bug where text overwrites each other when displaying final scores and comparisons between scores
 Correct the score comparison where both players are declared to have won, even though one has a lower score. <- May get fixed when above being implemented
 If a player dies, wait for the opponent's game to finish playing. <- May get fixed when first above being implemented 
 
@@ -198,11 +196,9 @@ GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek ser
 // UBAH SESUAI DENGAN MAC ADDRESS ESP32 MASING-MASING!!!
 // PILIH SATU!
 
-// uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
-uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
+uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
+// uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
 bool Multiplayer = false;                                             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
-bool OpponentActive = false;                                          // Cek apakah pemain lawan sudah aktif
-bool OpponentGameReady = false;                                       // Cek apakah pemain lawan sudah aktif
 const int DurationSeconds = 60;                                       // Durasi 2 menit dalam detik (120 detik)
 int RemainingTime = DurationSeconds;                                  // sisa waktu yang ada berdasarkan durasi detik
 
@@ -550,11 +546,9 @@ void onDataReceive(const uint8_t *macAddr, const uint8_t *data, int dataLen) {
   if (Opponent.MultiplayerReady)              // Periksa apakah lawan sudah siap
   {
     Serial.println("Lawan Sudah Ditemuka!");  // Memberitahukan pesan bahwa musuh siap dalam mode Multiplayer di Serial Monitor
-    OpponentActive = true;                    // Memberitahukan bahwa musuh telah hidupkan fitur Multiplayer
   }
   if (Opponent.MultiplayerGameReady) {
     Serial.println("Lawan Siap Bermain!");  // Memberitahukan pesan bahwa musuh siap bermain dalam mode Multiplayer di Serial Monitor
-    OpponentGameReady = true;               // Memberitahukan bahwa musuh telah siap bermain dalam Multiplayer
   }
   Serial.println("Data Diterima:");                                                                           // Menampilkan pesan bahwa data diterima di Serial Monitor
   Serial.printf("Skor Lawan: %d | Level: %d | Nyawa: %d\n", Opponent.Score, Opponent.Level, Opponent.Lives);  // Menampilkan data lawan di Serial Monitor
@@ -642,6 +636,7 @@ void loop() {
   } else if (MenuSelection)  // Jika dalam mode seleksi
   {
     ModeMenu();         // Fungsi untuk pilihan mode menu
+    HandleBGM(BGM_01);  // Mainkan BGM_01 (Secara looping)
   } else if (!StartUp)  // Jika Start-Up belum dijalankan
   {
     StartUpScreen();    // Jalankan Start-Up Screen
@@ -650,7 +645,8 @@ void loop() {
     return;  // Jangan lakukan apapun, hanya menunggu delay di GameOver() selesai
   } else     // Jika game tidak berlangsung
   {
-    MenuScreen();  // Fungsi layar menu
+    MenuScreen();       // Fungsi layar menu
+    HandleBGM(BGM_01);  // Mainkan BGM_01 (Secara looping)
   }
 }
 
@@ -1243,15 +1239,7 @@ void StartUpScreen() {
 
 // Fungsi layar main menu
 void MenuScreen() {
-  display.clearDisplay();    // Membersihkan semua tampilan display
-  if (mpPlayer.available())  // Cek apakah ada pesan dari DFPlayer. Untuk meng-looping BGM
-  {
-    uint8_t type = mpPlayer.readType();  // Dapatkan jenis pesan
-    if (type == DFPlayerPlayFinished)    // Jika playback selesai
-    {
-      mpPlayer.play(BGM_01);  // Mainkan kembali track 1
-    }
-  }
+  display.clearDisplay();                 // Membersihkan semua tampilan display
   CentreText("Mulai", 0);                 // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Loli Invaders", 12);        // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Tekan tombol tengah", 24);  // Menulis teks ditengah, dengan argumen koordinat Y
@@ -1386,15 +1374,7 @@ void NextLevel(PlayerStruct *PLAYER) {
 
 // Fungsi untuk memilih mode permainan
 void ModeMenu() {
-  display.clearDisplay();    // Bersihkan semua tampilan dalam layar
-  if (mpPlayer.available())  // Cek apakah ada pesan dari DFPlayer. Untuk meng-looping BGM
-  {
-    uint8_t type = mpPlayer.readType();  // Dapatkan jenis pesan
-    if (type == DFPlayerPlayFinished)    // Jika playback selesai
-    {
-      mpPlayer.play(BGM_01);  // Mainkan kembali track 1
-    }
-  }
+  display.clearDisplay();          // Bersihkan semua tampilan dalam layar
   CentreText("Pilih Mode", 0);     // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Singleplayer", 24);  // Menulis teks ditengah, dengan argumen koordinat Y
   CentreText("Multiplayer", 36);   // Menulis teks ditengah, dengan argumen koordinat Y
@@ -1426,14 +1406,6 @@ void NewGame() {
 
 // Fungsi untuk memainkan mode Multiplayer
 void MultiplayerMode() {
-  if (mpPlayer.available())  // Cek apakah ada pesan dari DFPlayer. Untuk meng-looping BGM
-  {
-    uint8_t type = mpPlayer.readType();  // Dapatkan jenis pesan
-    if (type == DFPlayerPlayFinished)    // Jika playback selesai
-    {
-      mpPlayer.play(BGM_01);  // Mainkan kembali track 1
-    }
-  }
   const int MaxRetries = 10;    // Jumlah maksimal sambung ulang
   const int RetryDelay = 2000;  // Jumlah jeda antar percobaan (ms)
   int Attempts = 0;             // Jumlah percobaan yang sudah dijalankan
@@ -1524,10 +1496,10 @@ void MultiplayerMode() {
     Multiplayer = true;                                          // Mode multiplayer sudah dijalankan (ESP-NOW sudah aktif)
   }
 
-  OpponentActive = false;          // Reset status lawan
-  Player.MultiplayerReady = true;  // Tanda bahwa pemain sudah siap
+  Opponent.MultiplayerReady = false;  // Reset status lawan
+  Player.MultiplayerReady = true;     // Tanda bahwa pemain sudah siap
 
-  while (!OpponentActive)  // Jika lawan belum aktif
+  while (!Opponent.MultiplayerReady)  // Jika lawan belum aktif
   {
     esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Mengirim data ke pemain lawan, untuk kasus ini cek apakah lawan aktif apa tidak
 
@@ -1555,14 +1527,14 @@ void MultiplayerMode() {
     }
   }
 
-  OpponentGameReady = false;           // Mereset bahwa musuh belum siap bermain
+  Opponent.MultiplayerGameReady = false;           // Mereset bahwa musuh belum siap bermain
   Player.MultiplayerGameReady = true;  // Mengatur bahwa pemain sudah siap bermain
 
-  while ((Player.MultiplayerReady) && (OpponentActive))  // Jika kedua pemain fitur multiplayer sudah aktif dan telah ditemukan
+  while ((Player.MultiplayerReady) && (Opponent.MultiplayerReady))  // Jika kedua pemain fitur multiplayer sudah aktif dan telah ditemukan
   {
     esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Mengirim data ke pemain lawan, untuk kasus ini pemain sudah siap bermain multiplayer
 
-    if ((Player.MultiplayerGameReady) && (OpponentGameReady))  // Jika kedua pemain sudah siap bermain game multiplayer
+    if ((Player.MultiplayerGameReady) && (Opponent.MultiplayerGameReady))  // Jika kedua pemain sudah siap bermain game multiplayer
     {
       display.clearDisplay();          // Menghilangkan semua benda di layar
       CentreText("Multiplayer", 0);    // Menulis teks ditengah, dengan argumen koordinat Y
@@ -1589,6 +1561,12 @@ void MultiplayerReset() {
     Multiplayer = false;              // Tandai bahwa ESP-NOW belum aktif
     Player.MultiplayerReady = false;  // Reset status siap multiplayer pemain
     Serial.println("Multiplayer Telah Dimatikan!");
+  }
+}
+
+void HandleBGM(uint8_t BGMTRACK) {
+  if (mpPlayer.available() && mpPlayer.readType() == DFPlayerPlayFinished) {
+    mpPlayer.play(BGMTRACK);
   }
 }
 
