@@ -5,12 +5,7 @@ Fix Audio INVADER_MOVE_SFX overriding other sfx
 
 Increase volume (db) on Start-Up audio (Within audio file)
 
-For multiplayer can adjust timer between 1-10 minutes both player decided the timer and take the middle number (Player 1 chooses 60 Seconds and Player 2 chooses 180 Seconds)
-
-Synchronization finishes the game, if one player finishes first then wait for the other player to finish.
-A bug where text overwrites each other when displaying final scores and comparisons between scores
-Correct the score comparison where both players are declared to have won, even though one has a lower score. <- May get fixed when above being implemented
-If a player dies, wait for the opponent's game to finish playing. <- May get fixed when first above being implemented 
+Wait other player to finish when the player is die
 
 Do playtesting to see any bug
 */
@@ -138,8 +133,10 @@ struct PlayerStruct {
   unsigned char InvaderSpeed;         // Semakin tinggi semakin lambat, di kalkulasi saat Invader dibunuh
   unsigned char ExplosionGfxCounter;  // Variable untuk menentukan berapa lama efek ledakan berlangsung
   unsigned char ShootCooldown;        // Cooldown serang
-  bool MultiplayerReady;              // Cek apakah pemain masuk dalam mode multiplayer
-  bool MultiplayerGameReady;          // Cek apakah pemain sudah siap bermain mode multiplayer
+  // PENGATURAN MODE MULTIPLAYER
+  unsigned int ChoosenTime;   // Pilihan waktu yang ditentukan pemain
+  bool MultiplayerReady;      // Cek apakah pemain masuk dalam mode multiplayer
+  bool MultiplayerGameReady;  // Cek apakah pemain sudah siap bermain mode multiplayer
 };
 
 // Struktur untuk Invader
@@ -196,10 +193,10 @@ GameObjectStruct InvaderAttack[MAX_ATTACK];                    // Buat objek ser
 // UBAH SESUAI DENGAN MAC ADDRESS ESP32 MASING-MASING!!!
 // PILIH SATU!
 
-uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
-// uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
+// uint8_t PlayerMACAddress[] = { 0x88, 0x13, 0xBF, 0x0B, 0x09, 0x40 };  // MAC Address Player 1 (Kabel Speaker Merah / Hitam)
+uint8_t PlayerMACAddress[] = { 0xCC, 0x7B, 0x5C, 0xF0, 0xC4, 0xA4 };  // MAC Address Player 2 (Kabel Speaker Abu-Abu / Cokelat)
 bool Multiplayer = false;                                             // Variable jika dalam mode multiplayer dan ESP-NOW sudah diaktifkan
-const int DurationSeconds = 60;                                       // Durasi 2 menit dalam detik (120 detik)
+unsigned int DurationSeconds = 120;                                   // Variable menyimpan durasi waktu dalam detik
 int RemainingTime = DurationSeconds;                                  // sisa waktu yang ada berdasarkan durasi detik
 
 esp_timer_handle_t Timer;  // Inisiasi timer bawaan ESP32
@@ -545,13 +542,13 @@ void onDataReceive(const uint8_t *macAddr, const uint8_t *data, int dataLen) {
   memcpy(&Opponent, data, sizeof(Opponent));  // Menyalin data yang diterima ke 'Opponent'
   if (Opponent.MultiplayerReady)              // Periksa apakah lawan sudah siap
   {
-    Serial.println("Lawan Sudah Ditemuka!");  // Memberitahukan pesan bahwa musuh siap dalam mode Multiplayer di Serial Monitor
+    Serial.println("Lawan Sudah Ditemukan!");  // Memberitahukan pesan bahwa musuh siap dalam mode Multiplayer di Serial Monitor
   }
   if (Opponent.MultiplayerGameReady) {
     Serial.println("Lawan Siap Bermain!");  // Memberitahukan pesan bahwa musuh siap bermain dalam mode Multiplayer di Serial Monitor
   }
-  Serial.println("Data Diterima:");                                                                           // Menampilkan pesan bahwa data diterima di Serial Monitor
-  Serial.printf("Skor Lawan: %d | Level: %d | Nyawa: %d\n", Opponent.Score, Opponent.Level, Opponent.Lives);  // Menampilkan data lawan di Serial Monitor
+  Serial.println("Data Diterima:");                                                                                                                     // Menampilkan pesan bahwa data diterima di Serial Monitor
+  Serial.printf("Skor Lawan: %d | Level: %d | Nyawa: %d | Waktu Dipilih: %d\n", Opponent.Score, Opponent.Level, Opponent.Lives, Opponent.ChoosenTime);  // Menampilkan data lawan di Serial Monitor
 }
 
 // Fungsi Callbak untuk mengonfirmasi pengiriman data, dijalankan ketika mengirim data
@@ -642,7 +639,7 @@ void loop() {
     StartUpScreen();    // Jalankan Start-Up Screen
   } else if (GameOver)  // Jika status pemain dalam game over
   {
-    return;  // Jangan lakukan apapun, hanya menunggu delay di GameOver() selesai
+    return;  // Jangan lakukan apapun, hanya menunggu delay di GameOverScreen() selesai
   } else     // Jika game tidak berlangsung
   {
     MenuScreen();       // Fungsi layar menu
@@ -1279,35 +1276,36 @@ void MenuScreen() {
 
 // Fungsi layar game over
 void GameOverScreen() {
-  GameInPlay = false;               // Atur kalo pemain sedang tidak bermain
-  GameOver = true;                  // Pemain sedang mengalami game over
-  display.clearDisplay();           // Bersihkan gambar layar
-  Player.MultiplayerReady = false;  // Reset status siap multiplayer pemain
+  GameInPlay = false;      // Atur kalo pemain sedang tidak bermain
+  GameOver = true;         // Pemain sedang mengalami game over
+  display.clearDisplay();  // Bersihkan gambar layar
 
   if (Multiplayer)  // Apabila mode Multiplayer
   {
-    display.clearDisplay();                                      // Bersihkan gambar layar
-    int MyScore = Player.Score + (Player.Level * 10);            // Kalkulasi skor pemain
-    int OpponentScore = Opponent.Score + (Opponent.Level * 10);  // Kalkulasi skor musuh
+    esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Mengirim data ke pemain lawan
+    Player.MultiplayerReady = false;                                     // Reset status siap multiplayer pemain
+    Player.ChoosenTime = 0;                                              // Atur ulang waktu pemain
 
-    CentreText("Skor milikmu: ", 0);  // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-    display.print(MyScore);           // Tampilkan nyawa pemain
-    CentreText("Skor lawan: ", 12);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
-    display.print(OpponentScore);     // Tampilkan nyawa pemain
+    int MyScore = Player.Score + (Player.Level * 10);            // Kalkulasi skor pemain
+    int OpponentScore = Opponent.Score + (Opponent.Level * 10);  // Kalkulasi skor lawan
+
+    CentreText("Skor Akhir", 0);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    CentreText("Milikmu: ", 24);   // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    display.print(MyScore);        // Tampilkan nyawa pemain
+    CentreText("Lawan: ", 36);     // Tuliskan teks pada layar sesuai argumen teks dan koordinat Y
+    display.print(OpponentScore);  // Tampilkan nyawa pemain
 
     if (MyScore > OpponentScore)  // Jika skor pemain lebih tinggi
     {
-      CentreText("Kamu Menang!", 24);    // Tulis teks berdasar argumen, serta lokasi Y
+      CentreText("Kamu Menang!", 48);    // Tulis teks berdasar argumen, serta lokasi Y
     } else if (MyScore < OpponentScore)  // Jika skor pemain lebih rendah
     {
-      CentreText("Kamu Kalah!", 24);  // Tulis teks berdasar argumen, serta lokasi Y
+      CentreText("Kamu Kalah!", 48);  // Tulis teks berdasar argumen, serta lokasi Y
     } else                            // Jika seri
     {
-      CentreText("Kalian Seri!", 24);  // Tulis teks berdasar argumen, serta lokasi Y
+      CentreText("Kalian Seri!", 48);  // Tulis teks berdasar argumen, serta lokasi Y
     }
-
-    display.display();  // Tampilkan semua teks diatas
-  } else                // Apabila mode Singleplayer
+  } else  // Apabila mode Singleplayer
   {
     CentreText("Pemain 1", 0);       // Tulis teks berdasar argumen, serta lokasi Y
     CentreText("Skill Issues", 12);  // Tulis teks berdasar argumen, serta lokasi Y
@@ -1315,18 +1313,22 @@ void GameOverScreen() {
     display.print(Player.Score);     // Tampilkan skor pemain
   }
 
+  display.display();  // Tampilkan semua teks diatas
+
   if (Player.Score > HighScore)  // Jika skor pemain lebih tinggi dari skor tertinggi
   {
-    CentreText("SKOR BARU!!!", 36);              // Tulis teks berdasar argumen, serta lokasi Y
-    CentreText("**SELAMAT**", 48);               // Tulis teks berdasar argumen, serta lokasi Y
+    delay(3000);                                 // Memberi jeda
+    display.clearDisplay();                      // Bersihkan gambar layar
+    CentreText("SKOR BARU!!!", 12);              // Tulis teks berdasar argumen, serta lokasi Y
+    CentreText("**SELAMAT**", 36);               // Tulis teks berdasar argumen, serta lokasi Y
     HighScore = Player.Score;                    // Atur skor tertinggi menjadi skor tertinggi yang pemain raih
     preferences.begin("storage", false);         // Buat penyimpanan atau buka bernama "storage" dengan mode Read & Write
     preferences.putInt("HighScore", HighScore);  // Baca data "HighScore"
     preferences.end();                           // Tutup penyimpanan saat tidak diperlukan
+    display.display();                           // Tampilkan semua teks diatas
   }
-  display.display();  // Tampilkan semua teks diatas
-  delay(3000);        // Memberi jeda
-  GameOver = false;   // Atur pemain agar tidak mengalami game over (Kembali dalam tampilan menu)
+  delay(3000);       // Memberi jeda
+  GameOver = false;  // Atur pemain agar tidak mengalami game over (Kembali dalam tampilan menu)
 }
 
 // Fungsi untuk menampilkan status pemain
@@ -1346,10 +1348,6 @@ void DisplayPlayerStatus(PlayerStruct *PLAYER) {
 
 // Fungsi untuk ke level selanjutnya
 void NextLevel(PlayerStruct *PLAYER) {
-  if (Multiplayer)  // Jika dalam mode multiplayer
-  {
-    esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Mengirim data ke pemain lawan
-  }
   int YStart;  // Buat variable untuk menyimpan lokasi awal Y
 
   for (int i = 0; i < MAX_ATTACK; i++)  // Jika index lebih kecil dari serangan Invader
@@ -1527,8 +1525,8 @@ void MultiplayerMode() {
     }
   }
 
-  Opponent.MultiplayerGameReady = false;           // Mereset bahwa musuh belum siap bermain
-  Player.MultiplayerGameReady = true;  // Mengatur bahwa pemain sudah siap bermain
+  Opponent.MultiplayerGameReady = false;  // Mereset bahwa musuh belum siap bermain
+  Player.MultiplayerGameReady = true;     // Mengatur bahwa pemain sudah siap bermain
 
   while ((Player.MultiplayerReady) && (Opponent.MultiplayerReady))  // Jika kedua pemain fitur multiplayer sudah aktif dan telah ditemukan
   {
@@ -1536,15 +1534,64 @@ void MultiplayerMode() {
 
     if ((Player.MultiplayerGameReady) && (Opponent.MultiplayerGameReady))  // Jika kedua pemain sudah siap bermain game multiplayer
     {
-      display.clearDisplay();          // Menghilangkan semua benda di layar
-      CentreText("Multiplayer", 0);    // Menulis teks ditengah, dengan argumen koordinat Y
-      CentreText("Kedua Pemain", 24);  // Menulis teks berhasil sesuai argumen teks dan koordinat Y
-      CentreText("Sudah Siap!", 36);   // Menulis teks berhasil sesuai argumen teks dan koordinat Y
-      display.display();               // Memunculkan semua gambar display
-      delay(RetryDelay);               // Memberi jeda sebelum kembali ke menu utama
-      GameInPlay = true;               // Permainan dijalankan
-      NewGame();                       // Jalankan permainan baru
-      break;
+      DecidingTimer();  // Fungsi untum menentukan waktu lama bermain
+      break;            // Keluar dari "while ((Player.MultiplayerReady) && (Opponent.MultiplayerReady))" loop
+    }
+  }
+}
+
+// Fungsi untuk menentukan lama waktunya permainan pada mode Multiplayer
+void DecidingTimer() {
+  bool Decided = false;   // Pemberi tanda apakah pemain sudah menentukan waktu, untuk ini tidak
+  DurationSeconds = 120;  // Mengatur waktu default sebagai 120 detik (2 Menit)
+
+  while (!Decided)  // Jika pemain belum memutuskan waktu yang dipilihnya
+  {
+    display.clearDisplay();                          // Menghilangkan semua benda di layar
+    CentreText("Multiplayer", 0);                    // Menulis teks ditengah, dengan argumen koordinat Y
+    CentreText("Tentukan Waktu", 24);                // Menulis teks ditengah, dengan argumen koordinat Y
+    display.setCursor((SCREEN_WIDTH / 2) - 12, 36);  // Atur text ditengah
+    int Minutes = DurationSeconds / 60;              // Variable untuk menit
+    int Seconds = DurationSeconds % 60;              // Variable untuk detik
+    display.printf("%02d:%02d", Minutes, Seconds);   // Tampilkan waktu
+
+    if ((digitalRead(LEFT_BUTTON) == false) && (DurationSeconds > 60))  // Jika tombol kiri ditekan dan durasi waktu lebih tinggi dari 60 detik (1 Menit)
+    {
+      DurationSeconds -= 30;                                                     // Maka kita boleh kurangi waktu dalam 30 detik
+      delay(200);                                                                // Debounce tombol
+    } else if ((digitalRead(RIGHT_BUTTON) == false) && (DurationSeconds < 600))  // Jika tombol kanan ditekan dan durasi waktu lebih rendah dari 600 detik (10 Menit)
+    {
+      DurationSeconds += 30;                        // Maka kita boleh tambahi waktu dalam 30 detik
+      delay(200);                                   // Debounce tombol
+    } else if (digitalRead(SHOOT_BUTTON) == false)  // Jika pemain menekan tombol tembak, atau enter dalam kasus ini
+    {
+      Player.ChoosenTime = DurationSeconds;                                // Atur pilihan waktu yang dipilih pemain dengan nilai "DurationSeconds"
+      esp_now_send(PlayerMACAddress, (uint8_t *)&Player, sizeof(Player));  // Mengirim data ke pemain lawan
+      Decided = true;                                                      // Pemberi tanda apakah pemain sudah menentukan waktu, untuk ini iya
+      break;                                                               // Keluar dari "while (!Decided)" loop
+    }
+    display.display();  // Memunculkan semua gambar display
+  }
+
+  while (Decided)  // Jika waktu sudah ditentukan
+  {
+    display.clearDisplay();
+    CentreText("Multiplayer", 0);       // Menulis teks ditengah, dengan argumen koordinat Y
+    CentreText("Menunggu Pemain", 24);  // Menulis teks berhasil sesuai argumen teks dan koordinat Y
+    display.display();                  // Memunculkan semua gambar display
+
+    if ((Player.ChoosenTime != NULL) && (Opponent.ChoosenTime != NULL))  // Jika semua pemain sudah menentukan waktunya
+    {
+      DurationSeconds = (Player.ChoosenTime + Opponent.ChoosenTime) / 2;  // Menghitung kalkulasi lama permainan
+      display.clearDisplay();                                             // Menghilangkan semua benda di layar
+      CentreText("Multiplayer", 0);                                       // Menulis teks ditengah, dengan argumen koordinat Y
+      CentreText("Kedua Pemain", 24);                                     // Menulis teks berhasil sesuai argumen teks dan koordinat Y
+      CentreText("Sudah Siap!", 36);                                      // Menulis teks berhasil sesuai argumen teks dan koordinat Y
+      display.display();                                                  // Memunculkan semua gambar display
+      delay(3000);                                                        // Memberi jeda sebelum kembali ke menu utama
+      GameInPlay = true;                                                  // Permainan dijalankan
+      NewGame();                                                          // Memulai permainan baru
+      break;                                                              // Keluar dari "while (Decided)" loop
     }
   }
 }
@@ -1557,16 +1604,18 @@ void MultiplayerReset() {
     {
       Serial.println("MAC Address Berhasil Dihapus!");  // Pesan berhasil dihapus di Serial Monitor
     }
-    esp_now_deinit();                 // Menonaktifkan ESP-NOW
-    Multiplayer = false;              // Tandai bahwa ESP-NOW belum aktif
-    Player.MultiplayerReady = false;  // Reset status siap multiplayer pemain
-    Serial.println("Multiplayer Telah Dimatikan!");
+    esp_now_deinit();                                // Menonaktifkan ESP-NOW
+    Multiplayer = false;                             // Tandai bahwa ESP-NOW belum aktif
+    Player.MultiplayerReady = false;                 // Reset status siap multiplayer pemain
+    Serial.println("Multiplayer Telah Dimatikan!");  // Tandai status bahwa fitur multiplayer telah dimatikan di Serial Monitor
   }
 }
 
+// Fungsi untuk menjalankan dan menangani BGM dengan mengambil argumen "BGMTRACK"
 void HandleBGM(uint8_t BGMTRACK) {
-  if (mpPlayer.available() && mpPlayer.readType() == DFPlayerPlayFinished) {
-    mpPlayer.play(BGMTRACK);
+  if (mpPlayer.available() && mpPlayer.readType() == DFPlayerPlayFinished)  // Jika status lagu selesai dimainkan di DFPlayer Mini
+  {
+    mpPlayer.play(BGMTRACK);  // Jalankan lagu berdasarkan argumen "BGMTRACK"
   }
 }
 
